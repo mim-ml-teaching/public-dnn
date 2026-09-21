@@ -1,0 +1,5 @@
+theme: minima
+minima:
+  skin: auto
+  header_pages: []
+timezone: Europe/Warsaw
