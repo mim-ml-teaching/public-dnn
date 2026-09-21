@@ -1,0 +1,77 @@
+{
+ "image": "crowd.jpg",
+ "note": "box_map/mask_map/gflops: torchvision weight metadata (COCO val2017); cpu_ms: our run, 16 threads",
+ "torch": "2.14.1+cpu",
+ "models": [
+  {
+   "name": "SSDlite (MobileNetV3)",
+   "kind": "one-stage",
+   "box_map": 21.3,
+   "mask_map": null,
+   "params_M": 3.4,
+   "gflops": 0.583,
+   "cpu_ms": 48,
+   "n_det_05": 4
+  },
+  {
+   "name": "SSD300 (VGG-16)",
+   "kind": "one-stage",
+   "box_map": 25.1,
+   "mask_map": null,
+   "params_M": 35.6,
+   "gflops": 34.858,
+   "cpu_ms": 139,
+   "n_det_05": 5
+  },
+  {
+   "name": "RetinaNet (R50-FPN)",
+   "kind": "one-stage",
+   "box_map": 36.4,
+   "mask_map": null,
+   "params_M": 34.0,
+   "gflops": 151.54,
+   "cpu_ms": 1228,
+   "n_det_05": 21
+  },
+  {
+   "name": "FCOS (R50-FPN)",
+   "kind": "anchor-free",
+   "box_map": 39.2,
+   "mask_map": null,
+   "params_M": 32.3,
+   "gflops": 128.207,
+   "cpu_ms": 1141,
+   "n_det_05": 26
+  },
+  {
+   "name": "Faster R-CNN (R50-FPN)",
+   "kind": "two-stage",
+   "box_map": 37.0,
+   "mask_map": null,
+   "params_M": 41.8,
+   "gflops": 134.38,
+   "cpu_ms": 1390,
+   "n_det_05": 40
+  },
+  {
+   "name": "Faster R-CNN v2 (R50-FPN)",
+   "kind": "two-stage",
+   "box_map": 46.7,
+   "mask_map": null,
+   "params_M": 43.7,
+   "gflops": 280.371,
+   "cpu_ms": 1840,
+   "n_det_05": 37
+  },
+  {
+   "name": "Mask R-CNN v2 (R50-FPN)",
+   "kind": "two-stage + masks",
+   "box_map": 47.4,
+   "mask_map": 41.8,
+   "params_M": 46.4,
+   "gflops": 333.577,
+   "cpu_ms": 2186,
+   "n_det_05": 39
+  }
+ ]
+}

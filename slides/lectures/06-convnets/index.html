@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lecture 6: Convolutional Neural Networks</title>
+  <link rel="stylesheet" href="../../vendor/reveal/reset.css">
+  <link rel="stylesheet" href="../../vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="../../vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="../../shared/deck.css">
+  <script src="../../vendor/katex/katex.min.js"></script>
+  <script src="../../vendor/katex/contrib/auto-render.min.js"></script>
+  <script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js" } }</script>
+  <style>
+    .tile { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+    .tile img { display: block; width: 100%; margin: 0; }
+    .tile .tag { position: absolute; left: 8px; top: 8px; background: rgba(21,23,28,0.85); color: var(--fg); font-size: 0.55em; padding: 0.1em 0.45em; border-radius: 5px; }
+    .cap { font-size: 0.64em; color: var(--fg-dim); margin-top: 0.25em; line-height: 1.3; }
+    .tbl td, .tbl th { padding: 0.25em 0.7em; }
+    .tbl td.num, .tbl th.num { text-align: right; font-family: var(--mono); }
+    .fmap-row { display: flex; align-items: center; gap: 0.6em; margin: 0.2em 0; }
+    .fmap-row img { height: 80px; margin: 0; border-radius: 4px; }
+    .fmap-row .lbl { width: 8em; font-size: 0.62em; color: var(--fg-dim); text-align: right; line-height: 1.25; }
+    pre.code { font-family: var(--mono); font-size: 0.56em; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 0.6em 0.9em; margin: 0.4em 0; line-height: 1.45; white-space: pre; color: var(--fg); box-shadow: none; width: auto; }
+    pre.code .c { color: var(--fg-dim); }
+    .bigq { font-size: 1.1em; }
+    .reveal .widget { font-size: 0.78em; }
+    .reveal table { font-size: 0.8em; }
+    .reveal .widget .small { font-size: 0.8em; }
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============================================================ -->
+<section class="title-slide">
+  <h1>Lecture 6<br>Convolutional neural networks</h1>
+  <p class="subtitle">from LeNet to ResNet</p>
+  <p class="subtitle">Deep Neural Networks · University of Warsaw · 2026/27</p>
+  <p class="small interactive-only" style="margin-top:1.5em"><a href="../../pdf/06-convnets.pdf">PDF version</a> (light, for printing)</p>
+</section>
+
+<section>
+  <h2>Today in one sentence</h2>
+  <div class="box key" style="font-size:1.0em; margin-top:0.8em; padding:0.6em 1.1em">
+    A convolutional network is a neural network with two built-in assumptions about images:
+    <b>nearby pixels belong together</b> and <b>the same pattern can appear anywhere</b>.
+  </div>
+  <div class="cols c-2" style="margin-top:0.9em; gap:1.0em">
+    <div class="box" style="padding:0.4em 0.7em"><h3 style="margin:0 0 0.2em">locality</h3><svg viewBox="0 0 420 190" style="width:100%; display:block"><rect x="20" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="30" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="64" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="64" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="64" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="81" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="81" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="81" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="98" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="98" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="98" width="17" height="17" fill="#2f4a66" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="20" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="37" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="54" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="88" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="105" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="122" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="139" y="149" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="71" y="64" width="51" height="51" fill="none" stroke="#5ab0ff" stroke-width="2.5"/><rect x="280" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="47" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="280" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="64" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="280" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="81" width="17" height="17" fill="#5ab0ff" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="81" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="280" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="98" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="280" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="115" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="280" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="297" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="314" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="331" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="348" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="365" y="132" width="17" height="17" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><line x1="122" y1="64" x2="348.0" y2="81.0" stroke="#5ab0ff" stroke-width="1.2" opacity="0.7"/><line x1="122" y1="115" x2="348.0" y2="98.0" stroke="#5ab0ff" stroke-width="1.2" opacity="0.7"/><text x="88" y="20" fill="#9aa1ae" font-size="13" text-anchor="middle">input image</text><text x="331" y="37" fill="#9aa1ae" font-size="13" text-anchor="middle">output feature map</text><text x="210" y="183" fill="#e7e9ee" font-size="13" text-anchor="middle">one output = a 3×3 window, the other 55 pixels are ignored</text></svg></div>
+    <div class="box" style="padding:0.4em 0.7em"><h3 style="margin:0 0 0.2em">translation invariance</h3><svg viewBox="0 0 420 190" style="width:100%; display:block"><defs><marker id="s2arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="14" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="30" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="46" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="46" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="46" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="62" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="78" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="78" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="78" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="78" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="94" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="110" width="16" height="16" fill="#e7e9ee" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="14" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="30" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="46" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="62" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="78" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="94" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="110" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="126" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="142" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="158" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="174" y="126" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="28" y="44" width="52" height="52" fill="none" stroke="#f2b134" stroke-width="2.5" rx="2"/><text x="54.0" y="110" fill="#f2b134" font-size="14" text-anchor="middle">w</text><rect x="124" y="76" width="52" height="52" fill="none" stroke="#f2b134" stroke-width="2.5" rx="2"/><text x="150.0" y="72" fill="#f2b134" font-size="14" text-anchor="middle">w</text><line x1="198" y1="86.0" x2="245" y2="86.0" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#s2arr)"/><rect x="255" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="271" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="287" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="303" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="319" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="335" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="351" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="367" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="383" y="46" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="255" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="271" y="62" width="16" height="16" fill="#5fd38d" stroke="#3a3f4b" stroke-width="1"/><rect x="287" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="303" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="319" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="335" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="351" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="367" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="383" y="62" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="255" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="271" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="287" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="303" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="319" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="335" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="351" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="367" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="383" y="78" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="255" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="271" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="287" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="303" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="319" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="335" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="351" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="367" y="94" width="16" height="16" fill="#5fd38d" stroke="#3a3f4b" stroke-width="1"/><rect x="383" y="94" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="255" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="271" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="287" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="303" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="319" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="335" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="351" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="367" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><rect x="383" y="110" width="16" height="16" fill="#272b34" stroke="#3a3f4b" stroke-width="1"/><text x="102.0" y="18" fill="#9aa1ae" font-size="13" text-anchor="middle">the same corner, twice</text><text x="327.0" y="36" fill="#9aa1ae" font-size="13" text-anchor="middle">response to filter w</text><text x="210" y="183" fill="#e7e9ee" font-size="13" text-anchor="middle">same weights w everywhere → the corner is found wherever it is</text></svg></div>
+  </div>
+  <div class="cols c-3" style="margin-top:0.9em; font-size:0.92em">
+    <div class="box"><h3>1 · the convolution</h3><p class="small" style="font-size:0.88em">what one layer computes, and why</p></div>
+    <div class="box"><h3>2 · a whole network</h3><p class="small" style="font-size:0.88em">pooling, LeNet, what the layers learn</p></div>
+    <div class="box"><h3>3 · the ImageNet era</h3><p class="small" style="font-size:0.88em">AlexNet, VGG, GoogLeNet, ResNet: one idea each</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Convnets are everywhere</h2>
+  <div class="cols" style="grid-template-columns: 1.25fr 1fr; gap:1.2em">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6em">
+      <div>
+        <div class="tile"><img src="../../assets/lecture06/chelsea.jpg" alt="A tabby cat, close-up"><span class="tag">Egyptian cat 0.63 · tiger cat 0.19 · tabby 0.17</span></div>
+        <div class="cap"><b>classification</b>: ResNet-18 (pretrained) on this photo</div>
+      </div>
+      <div>
+        <div class="tile"><img src="../../assets/lecture06/bison.jpg" alt="A bison in a meadow, with a detection box">
+          <div style="position:absolute; left:18%; top:6%; width:68%; height:84%; border:3px solid var(--accent); border-radius:4px"></div>
+          <span class="tag" style="left:19%; top:7%; background:var(--accent); color:#15171c">bison</span></div>
+        <div class="cap"><b>detection</b>: what is where (box drawn for illustration)</div>
+      </div>
+      <div>
+        <svg viewBox="0 0 300 196" style="width:100%; border-radius:8px; border:1px solid #3a3f4b; display:block">
+          <rect width="300" height="196" fill="#3b6fb6"/><rect y="110" width="300" height="86" fill="#5a606c"/>
+          <rect x="0" y="40" width="60" height="70" fill="#9b7653"/><rect x="230" y="25" width="70" height="85" fill="#9b7653"/>
+          <rect x="120" y="98" width="110" height="40" rx="8" fill="#ff6b6b"/><circle cx="145" cy="140" r="12" fill="#272b34"/><circle cx="205" cy="140" r="12" fill="#272b34"/>
+          <circle cx="78" cy="96" r="9" fill="#5fd38d"/><rect x="70" y="105" width="16" height="40" rx="5" fill="#5fd38d"/>
+          <rect x="0" y="160" width="300" height="36" fill="#f2b134" opacity="0.35"/>
+        </svg>
+        <div class="cap"><b>segmentation</b>: a class for every pixel (road, car, person, …)</div>
+      </div>
+      <div>
+        <svg viewBox="0 0 300 196" style="width:100%; border-radius:8px; border:1px solid #3a3f4b; display:block; background:#c9a063">
+          <g stroke="#4a3a20" stroke-width="1">
+            <line x1="60" y1="18" x2="60" y2="178"/><line x1="80" y1="18" x2="80" y2="178"/><line x1="100" y1="18" x2="100" y2="178"/><line x1="120" y1="18" x2="120" y2="178"/><line x1="140" y1="18" x2="140" y2="178"/><line x1="160" y1="18" x2="160" y2="178"/><line x1="180" y1="18" x2="180" y2="178"/><line x1="200" y1="18" x2="200" y2="178"/><line x1="220" y1="18" x2="220" y2="178"/><line x1="240" y1="18" x2="240" y2="178"/>
+            <line x1="60" y1="18" x2="240" y2="18"/><line x1="60" y1="38" x2="240" y2="38"/><line x1="60" y1="58" x2="240" y2="58"/><line x1="60" y1="78" x2="240" y2="78"/><line x1="60" y1="98" x2="240" y2="98"/><line x1="60" y1="118" x2="240" y2="118"/><line x1="60" y1="138" x2="240" y2="138"/><line x1="60" y1="158" x2="240" y2="158"/><line x1="60" y1="178" x2="240" y2="178"/>
+          </g>
+          <circle cx="120" cy="78" r="8.5" fill="#111"/><circle cx="140" cy="98" r="8.5" fill="#111"/><circle cx="160" cy="78" r="8.5" fill="#eee"/><circle cx="160" cy="118" r="8.5" fill="#eee"/><circle cx="100" cy="118" r="8.5" fill="#111"/><circle cx="180" cy="98" r="8.5" fill="#eee"/>
+          <circle cx="140" cy="58" r="8" fill="#f2b134" opacity="0.85"/><circle cx="120" cy="138" r="6" fill="#f2b134" opacity="0.5"/><circle cx="200" cy="78" r="5" fill="#f2b134" opacity="0.35"/>
+        </svg>
+        <div class="cap"><b>Go</b>: AlphaGo (2016) reads the 19×19 board as an image; amber = move probabilities</div>
+      </div>
+    </div>
+    <div style="font-size:0.92em">
+      <ul>
+        <li>reading digits: LeNet read handwritten cheques in the late 1990s</li>
+        <li>medical images: tumour segmentation, retina screening</li>
+        <li>cars and robots: camera image → what is around → what to do</li>
+        <li>image generation: the denoising network inside diffusion and flow-matching models is a convnet (UNet, lecture 7)</li>
+        <li>also on non-images: audio spectrograms, board games, protein contact maps</li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Photos: “Chelsea the cat” (S. van der Walt, CC0, scikit-image); bison: WikiImages, Pixabay licence.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 1</div>
+  <h1>An image is not just a vector</h1>
+</section>
+
+<section>
+  <h2>A puzzle: shuffle the pixels</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.2em; align-items:center">
+    <div>
+      <img src="../../assets/lecture06/shuffled_cifar10.png" alt="Eight CIFAR-10 images (top row) and the same images with their pixels shuffled by one fixed permutation (bottom row)" style="width:100%; margin:0; border-radius:6px; image-rendering:pixelated">
+      <div class="cap">top: CIFAR-10 test images (32×32); bottom: the same images, pixels shuffled by <b>one fixed</b> permutation</div>
+    </div>
+    <div>
+      <ul>
+        <li>pick one random permutation of the 32·32 pixel positions</li>
+        <li>apply it to <b>every</b> image, training and test</li>
+        <li>train a network on the shuffled images</li>
+      </ul>
+      <div class="question bigq">An MLP (input flattened to a vector) is trained on the shuffled images. Its test accuracy is… higher, the same, or lower than on the original images?</div>
+    </div>
+  </div>
+  <p class="credit">CIFAR-10: Krizhevsky (2009).</p>
+</section>
+
+<section>
+  <h2>Experiment: MLP vs convnet, original vs shuffled pixels</h2>
+  <div data-widget="linechart" data-config='{"src":"../../assets/lecture06/data/shuffled_pixels_cifar10.json","x":"original.epoch","xlabel":"epoch","ylabel":"test accuracy","yfmt":"pct","ymin":0.1,"ymax":0.8,"width":1080,"height":360,"panels":[{"title":"MLP (2 hidden layers of 512)","base":"mlp"},{"title":"convnet (4 conv layers + 2 dense)","base":"cnn"}],"series":[{"key":"original.test_acc","label":"original","color":"#3987e5"},{"key":"shuffled.test_acc","label":"shuffled","color":"#c98500"}]}'></div>
+  <div class="takeaway" style="font-size:0.88em">The MLP ignores where pixels are: shuffled or not, the same problem. The convnet <b>relies on neighbouring pixels being related</b>: on shuffled images it drops from 75% to 50%, below the MLP.</div>
+  <p class="credit">Our run: <code>experiments/shuffled_pixels.py</code> (Adam, CIFAR-10).</p>
+</section>
+
+<section>
+  <h2>From a dense layer to a convolution, in two steps</h2>
+  <div data-widget="connect1d" data-config='{"n":8,"width":1180,"height":270}'></div>
+  <table class="tbl" style="font-size:0.76em; margin-top:0.6em">
+    <tr><th>number of weights</th><th class="num">dense</th><th class="num">local</th><th class="num">local + shared</th></tr>
+    <tr><td>1D, 8 inputs → 8 outputs (above)</td><td class="num">64</td><td class="num">22</td><td class="num">3</td></tr>
+    <tr><td>image 224×224×3 → 224×224×64, 3×3 neighbourhood</td><td class="num">4.8·10¹¹</td><td class="num">8.7·10⁷</td><td class="num">1,728</td></tr>
+  </table>
+  <div class="takeaway" style="font-size:0.86em; margin-top:0.4em">Local + shared = a <b>convolution</b>. Not only fewer parameters: <b>local</b> means an output depends only on a small window; <b>shared</b> means every window is read with the same weights. Together: a pattern gives the same response wherever it is, only moved with it (<b>translation equivariance</b>, next slide).</div>
+</section>
+
+<section>
+  <h2>Local + shared ⇒ a shifted pattern gives a shifted response</h2>
+  <div data-widget="shift1d" data-config='{"n":10,"pattern":[1,3,2],"pos":1,"shift":3,"kernel":[-1,2,1],"cell":44,"width":1180}'></div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.8em; margin-top:0.1em">
+    <div>$$y_i = w_1 x_{i-1} + w_2 x_i + w_3 x_{i+1}\quad\text{for every } i$$
+      <p class="small" style="margin-top:0">Shift the input by $s$: output $i+s$ now sees exactly the window that output $i$ saw before, with the same weights, so $y'_{i+s} = y_i$.</p></div>
+    <div><p class="small">Only local: the shifted pattern meets <b>other weights</b> and gives other numbers. The network would have to learn "a corner" separately at every position.</p>
+      <p class="small">Only shared, not local (one weight for all inputs): every output is the same sum, position is lost.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 2</div>
+  <h1>The convolution</h1>
+</section>
+
+<section>
+  <h2>A convolution, on numbers</h2>
+  <div data-widget="conv2d" data-config='{"input":[[1,1,2,8,9,9],[1,2,1,9,8,9],[2,1,1,8,9,8],[1,1,2,9,9,9],[2,1,1,8,8,9],[1,2,1,9,9,8]],"kernel":[[-1,0,1],[-1,0,1],[-1,0,1]],"step":5,"cell":58}'></div>
+  <div class="cols" style="grid-template-columns:1.1fr 1fr; margin-top:0.2em; font-size:0.88em">
+    <div>$$y_{ij} \;=\; \sum_{u=0}^{k-1}\sum_{v=0}^{k-1} w_{uv}\, x_{i+u,\,j+v} \;+\; b$$</div>
+    <p class="small" style="font-size:0.8em">Slide the kernel over the image; at every position take the dot product with the patch under it. This kernel responds to dark → bright <b>vertical edges</b>. (Mathematicians call this cross-correlation; deep learning calls it convolution.)</p>
+  </div>
+</section>
+
+<section>
+  <h2>Two questions before we try kernels</h2>
+  <div class="cols" style="grid-template-columns: 0.9fr 1.3fr; gap:1.4em; align-items:center">
+    <div><img src="../../assets/lecture06/chelsea.jpg" alt="A tabby cat, close-up" style="width:100%; border-radius:8px; display:block"></div>
+    <div style="font-size:0.95em">
+      <div class="question">What will happen if we replace each pixel by the <b>average of all pixels within (maximum) distance 2</b>?</div>
+      <div class="question" style="margin-top:1em">What will happen if we <b>subtract from each pixel the average of its neighbouring pixels</b>?</div>
+      <p class="small" style="margin-top:1.2em">For each: what does the image look like afterwards, and which kernel computes it?</p>
+    </div>
+  </div>
+  <p class="credit">Photo: “Chelsea the cat” (S. van der Walt, CC0, scikit-image).</p>
+</section>
+
+<section>
+  <h2>Different kernels detect different things</h2>
+  <div data-widget="kernelimg" data-config='{"src":"../../assets/lecture06/chelsea.jpg","preset":"blur5","width":340}'></div>
+  <div class="takeaway" style="font-size:0.86em">Answers: <b>blur 5×5</b> (all entries 1/25, sum 1: the image gets smoother, brightness kept) and <b>pixel − mean of neighbours</b> (sum 0: flat regions vanish, edges remain). Type your own kernel.</div>
+</section>
+
+<section>
+  <h2>Do not design the kernel: learn it</h2>
+  <div class="cols small" style="grid-template-columns: 1.25fr 1fr; gap:1em; align-items:center; margin:0 0 0.3em">
+    <div>Task: is there an <b style="color:#f2b134">×</b> (or a +) in the image? Only the label is given; the position is random.</div>
+    <div>$p(\times) = \sigma\big(\max_{i,j}\,(x * K)_{ij} + b\big)$, one $5\times 5$ kernel $K$</div>
+  </div>
+  <div data-widget="learndetect" data-config='{"seed":1,"k":5}'></div>
+  <div class="takeaway" style="font-size:0.86em; margin-top:0.3em">Nobody designed $K$: the loss turned it into an <b>× detector</b>: it looks like the × itself. The same kernel at every position finds the × anywhere. A convnet learns thousands of kernels at once.</div>
+</section>
+
+<section>
+  <h2>Padding and stride</h2>
+  <div class="cols" style="grid-template-columns: 1.6fr 1fr; gap:1em">
+    <div data-widget="conv2d" data-config='{"mode":"geometry","n":5,"k":3,"pad":1,"stride":2,"step":4,"cell":40}'></div>
+    <div style="font-size:0.92em">
+      <ul>
+        <li><b>padding</b> $p$: a border of zeros; with stride 1, $p = (k-1)/2$ keeps the size (“same”)</li>
+        <li><b>stride</b> $s$: the step of the window; $s = 2$ halves the size</li>
+      </ul>
+      $$n_\text{out} = \left\lfloor \frac{n + 2p - k}{s} \right\rfloor + 1$$
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Many channels: a volume in, a volume out</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; align-items:center">
+    <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":32,"w":32,"c":3,"label":"32×32×3","sub":"input (RGB)","kernel":{"k":5,"label":"5×5×3"}},{"type":"op","text":"6 filters","width":110},{"type":"vol","h":28,"w":28,"c":6,"label":"28×28×6","sub":"6 feature maps","color":"#5fd38d"}],"hs":16,"cs":10,"width":600,"height":470,"maxScale":3}'></div>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>a filter spans <b>all</b> input channels: $k \times k \times C_\text{in}$</li>
+        <li>each filter gives one output channel (<b>feature map</b>); $C_\text{out}$ filters → $C_\text{out}$ maps</li>
+      </ul>
+      $$y_{o,i,j} = b_o + \sum_{c=1}^{C_\text{in}} \sum_{u,v} w_{o,c,u,v}\; x_{c,\,i+u,\,j+v}$$
+      <ul>
+        <li>weights: a tensor $C_\text{out} \times C_\text{in} \times k \times k$</li>
+        <li>parameters: $C_\text{out}\,(C_\text{in} k^2 + 1)$</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Two views of a volume, and the 1×1 convolution</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.4em; align-items:start">
+    <div>
+      <svg viewBox="0 0 520 250" style="width:100%">
+        <g font-family="Inter, Arial" font-size="15">
+          <g fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff" stroke-width="1.5">
+            <rect x="20" y="70" width="120" height="120"/><rect x="34" y="56" width="120" height="120"/><rect x="48" y="42" width="120" height="120"/><rect x="62" y="28" width="120" height="120"/>
+          </g>
+          <text x="100" y="222" fill="#e7e9ee" text-anchor="middle">C feature maps, each H×W</text>
+          <g stroke="#5a606c" stroke-width="1">
+            <line x1="300" y1="40" x2="300" y2="190"/><line x1="330" y1="40" x2="330" y2="190"/><line x1="360" y1="40" x2="360" y2="190"/><line x1="390" y1="40" x2="390" y2="190"/><line x1="420" y1="40" x2="420" y2="190"/><line x1="450" y1="40" x2="450" y2="190"/>
+            <line x1="300" y1="40" x2="450" y2="40"/><line x1="300" y1="70" x2="450" y2="70"/><line x1="300" y1="100" x2="450" y2="100"/><line x1="300" y1="130" x2="450" y2="130"/><line x1="300" y1="160" x2="450" y2="160"/><line x1="300" y1="190" x2="450" y2="190"/>
+          </g>
+          <rect x="360" y="100" width="30" height="30" fill="#f2b134" fill-opacity="0.5" stroke="#f2b134" stroke-width="2"/>
+          <g fill="#f2b134"><rect x="470" y="60" width="16" height="14"/><rect x="470" y="78" width="16" height="14"/><rect x="470" y="96" width="16" height="14"/><rect x="470" y="114" width="16" height="14"/><rect x="470" y="132" width="16" height="14"/></g>
+          <line x1="390" y1="115" x2="466" y2="102" stroke="#f2b134" stroke-width="1.5"/>
+          <text x="478" y="166" fill="#f2b134" text-anchor="middle">ℝᶜ</text>
+          <text x="380" y="222" fill="#e7e9ee" text-anchor="middle">H×W pixels, each a C-dim feature vector</text>
+        </g>
+      </svg>
+    </div>
+    <div style="font-size:0.9em">
+      <p>A <b>1×1 convolution</b> = the same dense layer $\mathbb{R}^{C_\text{in}} \to \mathbb{R}^{C_\text{out}}$ applied to every pixel’s feature vector.</p>
+      <ul>
+        <li>mixes channels, does not look at neighbours</li>
+        <li>parameters: $C_\text{out}(C_\text{in} + 1)$</li>
+        <li>cheap way to change the number of channels: e.g. 256 → 64 before an expensive 3×3 convolution (GoogLeNet, ResNet, later today)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="optional">
+  <h2>A convolution is a dense layer with a special matrix <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:center">
+    <div style="font-size:0.95em">
+      $$\begin{bmatrix} y_1\\ y_2\\ y_3\\ y_4 \end{bmatrix} = \begin{bmatrix}
+        \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3} & 0 & 0 & 0\\
+        0 & \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3} & 0 & 0\\
+        0 & 0 & \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3} & 0\\
+        0 & 0 & 0 & \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3}
+      \end{bmatrix} \begin{bmatrix} x_1\\ x_2\\ x_3\\ x_4\\ x_5\\ x_6 \end{bmatrix}$$
+    </div>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>1D, $k = 3$, no padding: $\mathbb{R}^6 \to \mathbb{R}^4$</li>
+        <li>most entries are fixed to 0 (<b>locality</b>), the rest are tied (<b>sharing</b>)</li>
+        <li>backprop: a shared weight collects the gradient from every position
+          $$\frac{\partial L}{\partial w_1} = \sum_{i} \frac{\partial L}{\partial y_i}\, x_{i}$$</li>
+        <li>a convnet is “just” an MLP with a strong prior on its weight matrices</li>
+        <li>a <b>view</b> for the maths only: this matrix is never built, the zeros are never multiplied (next slide)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="optional">
+  <h2>In practice: im2col + one matrix product <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:center">
+    <div style="font-size:0.95em">
+      <p class="small" style="margin:0 0 0.2em">copy every window into one row (“image to columns”), then multiply by the kernel:</p>
+      $$\begin{bmatrix} y_1\\ y_2\\ y_3\\ y_4 \end{bmatrix} = \begin{bmatrix}
+        x_1 & x_2 & x_3\\ x_2 & x_3 & x_4\\ x_3 & x_4 & x_5\\ x_4 & x_5 & x_6
+      \end{bmatrix} \begin{bmatrix} \color{#ff6b6b}{w_1}\\ \color{#5fd38d}{w_2}\\ \color{#5ab0ff}{w_3} \end{bmatrix}$$
+      <p class="small" style="margin-top:0.4em">same result as the banded matrix, but only the $k$ non-zero products per output are computed</p>
+    </div>
+    <div style="font-size:0.84em">
+      <ul>
+        <li>2D, many channels: one dense matrix product
+          $$\underbrace{(H'W')\times(k^2 C_{\text{in}})}_{\text{windows}} \cdot \underbrace{(k^2 C_{\text{in}})\times C_{\text{out}}}_{\text{all filters}}$$
+          the operation GPUs are fastest at</li>
+        <li>cost $H'W' \cdot k^2 C_{\text{in}} \cdot C_{\text{out}}$ multiply-adds: locality is what makes it cheap</li>
+        <li>the window matrix is $k^2$ times larger than the image, so libraries (cuDNN) build it on the fly in fast on-chip memory (“implicit GEMM”), or use Winograd (3×3) or FFT (large kernels)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Check yourself</h2>
+  <p>Input volume <b>33×33×5</b>. Apply <b>10 filters</b> of size <b>3×3</b>, stride <b>2</b>, no padding.</p>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.4em; font-size:0.8em">
+    <div data-widget="slido" data-config='{"question":"(1) What is the output size?","options":["31×31×10","16×16×10","16×16×5","15×15×10"]}'></div>
+    <div data-widget="slido" data-config='{"question":"(2) How many parameters does the layer have?","options":["90","100","450","460"]}'></div>
+  </div>
+</section>
+
+<section>
+  <h2>Answers</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.15fr; gap:1.2em">
+    <div>
+      <p>output size</p>
+      $$\left\lfloor \frac{33 - 3}{2} \right\rfloor + 1 = 16 \;\Rightarrow\; 16 \times 16 \times 10$$
+      <p style="margin-top:0.8em">parameters</p>
+      $$10 \cdot (\underbrace{3 \cdot 3 \cdot 5}_{\text{one filter}} + \underbrace{1}_{\text{bias}}) = 460$$
+    </div>
+    <div>
+      <p class="small">the same in PyTorch</p>
+<pre class="code">conv = nn.Conv2d(in_channels=5, out_channels=10,
+                 kernel_size=3, stride=2, padding=0)
+x = torch.randn(1, 5, 33, 33)   <span class="c"># (batch, C, H, W)</span>
+conv(x).shape                   <span class="c"># [1, 10, 16, 16]</span>
+conv.weight.shape               <span class="c"># [10, 5, 3, 3]</span>
+conv.bias.shape                 <span class="c"># [10]</span>
+sum(p.numel() for p in conv.parameters())   <span class="c"># 460</span></pre>
+      <p class="small">The output size does not depend on the number of filters; the parameter count does not depend on the image size.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Shift the input, the feature map shifts with it</h2>
+  <div data-widget="equivariance" data-config='{"n":20,"cell":15,"dx":3,"dy":1}'></div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.83em; margin-top:0.3em">
+    <div>$$\mathrm{conv}(\mathrm{shift}(x)) = \mathrm{shift}(\mathrm{conv}(x))$$
+      <p>translation <b>equivariance</b>: a pattern is detected wherever it appears</p></div>
+    <div><p style="margin-top:0"><b>Except near the border</b>: the window overlaps the zero padding, part of the response is cut off, and on a grey background the padding creates a <b>fake edge</b> (try it).</p>
+      <p class="small">Not built in: rotation, scaling, colour changes: <b>data augmentation</b> (later today).</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 3</div>
+  <h1>A whole network: LeNet</h1>
+</section>
+
+<section>
+  <h2>Max pooling</h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:center">
+    <div>
+      <svg viewBox="0 0 560 260" style="width:100%">
+        <g font-family="JetBrains Mono, monospace" font-size="22" text-anchor="middle">
+          <rect x="20" y="30" width="100" height="100" fill="#ff6b6b" fill-opacity="0.28"/><rect x="120" y="30" width="100" height="100" fill="#5fd38d" fill-opacity="0.28"/>
+          <rect x="20" y="130" width="100" height="100" fill="#f2b134" fill-opacity="0.28"/><rect x="120" y="130" width="100" height="100" fill="#5ab0ff" fill-opacity="0.28"/>
+          <g stroke="#3a3f4b" fill="none"><rect x="20" y="30" width="200" height="200"/><line x1="70" y1="30" x2="70" y2="230"/><line x1="120" y1="30" x2="120" y2="230" stroke="#9aa1ae"/><line x1="170" y1="30" x2="170" y2="230"/><line x1="20" y1="80" x2="220" y2="80"/><line x1="20" y1="130" x2="220" y2="130" stroke="#9aa1ae"/><line x1="20" y1="180" x2="220" y2="180"/></g>
+          <g fill="#e7e9ee"><text x="45" y="63">1</text><text x="95" y="63">1</text><text x="145" y="63">2</text><text x="195" y="63">4</text>
+          <text x="45" y="113">5</text><text x="95" y="113" font-weight="700">6</text><text x="145" y="113">7</text><text x="195" y="113" font-weight="700">8</text>
+          <text x="45" y="163" font-weight="700">3</text><text x="95" y="163">2</text><text x="145" y="163">1</text><text x="195" y="163">0</text>
+          <text x="45" y="213">1</text><text x="95" y="213">2</text><text x="145" y="213">3</text><text x="195" y="213" font-weight="700">4</text></g>
+          <text x="315" y="100" fill="#f2b134" font-family="Inter, Arial" font-size="18">max 2×2,</text><text x="315" y="122" fill="#f2b134" font-family="Inter, Arial" font-size="18">stride 2</text>
+          <line x1="250" y1="135" x2="380" y2="135" stroke="#5a606c" stroke-width="2"/><polygon points="390,135 380,130 380,140" fill="#5a606c"/>
+          <rect x="410" y="80" width="55" height="55" fill="#ff6b6b" fill-opacity="0.28"/><rect x="465" y="80" width="55" height="55" fill="#5fd38d" fill-opacity="0.28"/>
+          <rect x="410" y="135" width="55" height="55" fill="#f2b134" fill-opacity="0.28"/><rect x="465" y="135" width="55" height="55" fill="#5ab0ff" fill-opacity="0.28"/>
+          <rect x="410" y="80" width="110" height="110" fill="none" stroke="#3a3f4b"/>
+          <g fill="#e7e9ee" font-weight="700"><text x="437" y="115">6</text><text x="492" y="115">8</text><text x="437" y="170">3</text><text x="492" y="170">4</text></g>
+        </g>
+      </svg>
+    </div>
+    <div style="font-size:0.9em">
+      <ul>
+        <li>each channel separately; <b>no parameters</b></li>
+        <li>2×2, stride 2: halves height and width (224×224×64 → 112×112×64)</li>
+        <li>keeps the strongest response: a feature shifted by a pixel gives the same output (local <b>invariance</b>)</li>
+        <li>average pooling: the mean instead of the max</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Putting it together: LeNet-5 (LeCun et al., 1998)</h2>
+  <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":32,"w":32,"c":1,"label":"32×32×1","sub":"digit"},{"type":"op","text":"conv 5×5","sub":"6 filters"},{"type":"vol","h":28,"w":28,"c":6,"label":"28×28×6"},{"type":"op","text":"pool 2×2"},{"type":"vol","h":14,"w":14,"c":6,"label":"14×14×6"},{"type":"op","text":"conv 5×5","sub":"16 filters"},{"type":"vol","h":10,"w":10,"c":16,"label":"10×10×16"},{"type":"op","text":"pool 2×2"},{"type":"vol","h":5,"w":5,"c":16,"label":"5×5×16"},{"type":"op","text":"flatten","sub":"dense"},{"type":"fc","n":120,"label":"120"},{"type":"op","width":40},{"type":"fc","n":84,"label":"84"},{"type":"op","width":40},{"type":"fc","n":10,"label":"10","color":"#f2b134"}],"width":1180,"height":300}'></div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.83em">
+    <table class="tbl">
+      <tr><th>layer</th><th class="num">output</th><th class="num">parameters</th></tr>
+      <tr><td>conv 5×5, 6</td><td class="num">28×28×6</td><td class="num">156</td></tr>
+      <tr><td>conv 5×5, 16</td><td class="num">10×10×16</td><td class="num">2,416</td></tr>
+      <tr><td>dense 400 → 120</td><td class="num">120</td><td class="num">48,120</td></tr>
+      <tr><td>dense 120 → 84 → 10</td><td class="num">10</td><td class="num">11,014</td></tr>
+    </table>
+    <div>
+      <ul>
+        <li>conv → pool → conv → pool → dense: the template for the next 15 years</li>
+        <li>convolutions: 4% of the parameters, most of the computation</li>
+        <li>1998: tanh and average pooling; above the modern variant (ReLU, max pool)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Check yourself</h2>
+  <div data-widget="slido" data-config='{"question":"Pass an image through 3 convolutional layers, each 3×3 with stride 1. How large is the part of the input that can influence one output pixel?","options":["3×3","5×5","7×7","9×9","27×27"]}'></div>
+</section>
+
+<section>
+  <h2>Receptive field</h2>
+  <div data-widget="receptive" data-config='{"layers":3,"k":3,"pool":false,"size":240}'></div>
+  <p class="small" style="margin:0.1em 0 0">coloured: one pixel and the window it is computed from in the previous layer · amber: everything the output pixel depends on</p>
+  <div class="takeaway" style="font-size:0.86em">Every layer sees a larger part of the image: a stack of small kernels (and pooling) builds a <b>hierarchy</b>, from small local patterns to whole objects.</div>
+</section>
+
+<section>
+  <h2>What do the layers learn?</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.05fr; gap:1.2em">
+    <div>
+      <img src="../../assets/lecture06/alexnet_conv1.png" alt="The 64 first-layer filters of AlexNet, 11×11×3 each, shown as colour images: oriented edges, gratings and colour blobs" style="width:100%; margin:0; border-radius:6px; image-rendering:pixelated">
+      <div class="cap">all 64 first-layer filters of AlexNet (11×11×3), trained on ImageNet: oriented edges, gratings, colour blobs</div>
+      <p style="font-size:0.8em; margin-top:0.6em">Nobody designed these: they are what gradient descent found useful.</p>
+    </div>
+    <div>
+      <div class="fmap-row"><div class="lbl">after conv 1<br>112×112</div><img src="../../assets/lecture06/fmap_relu.png" alt="feature maps after the first convolution: edge images of the cat"></div>
+      <div class="fmap-row"><div class="lbl">stage 1<br>56×56</div><img src="../../assets/lecture06/fmap_layer1.png" alt="feature maps of stage 1: textures"></div>
+      <div class="fmap-row"><div class="lbl">stage 2<br>28×28</div><img src="../../assets/lecture06/fmap_layer2.png" alt="feature maps of stage 2: sparse responses"></div>
+      <div class="fmap-row"><div class="lbl">stage 3<br>14×14</div><img src="../../assets/lecture06/fmap_layer3.png" alt="feature maps of stage 3: eyes and nose"></div>
+      <div class="fmap-row"><div class="lbl">stage 4<br>7×7</div><img src="../../assets/lecture06/fmap_layer4.png" alt="feature maps of stage 4: coarse blobs"></div>
+      <div class="cap">ResNet-18 on the cat photo: 6 channels per depth. Edges → textures → parts (eyes, nose) → coarse object maps.</div>
+    </div>
+  </div>
+  <p class="credit">Our figures from torchvision’s pretrained weights: <code>experiments/features.py</code>.</p>
+</section>
+
+<section class="optional">
+  <h2>The same hierarchy in the visual cortex <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:center">
+    <div>
+      <svg viewBox="0 0 560 300" style="width:100%">
+        <g font-family="Inter, Arial" font-size="15">
+          <text x="10" y="22" fill="#9aa1ae">stimulus: a bar of light at different angles</text>
+          <g transform="translate(55,75)"><circle r="34" fill="#272b34" stroke="#3a3f4b"/><rect x="-4" y="-28" width="8" height="56" fill="#e7e9ee" transform="rotate(0)"/></g>
+          <g transform="translate(165,75)"><circle r="34" fill="#272b34" stroke="#3a3f4b"/><rect x="-4" y="-28" width="8" height="56" fill="#e7e9ee" transform="rotate(30)"/></g>
+          <g transform="translate(275,75)"><circle r="34" fill="#272b34" stroke="#3a3f4b"/><rect x="-4" y="-28" width="8" height="56" fill="#e7e9ee" transform="rotate(60)"/></g>
+          <g transform="translate(385,75)"><circle r="34" fill="#272b34" stroke="#3a3f4b"/><rect x="-4" y="-28" width="8" height="56" fill="#e7e9ee" transform="rotate(90)"/></g>
+          <g transform="translate(495,75)"><circle r="34" fill="#272b34" stroke="#3a3f4b"/><rect x="-4" y="-28" width="8" height="56" fill="#e7e9ee" transform="rotate(120)"/></g>
+          <text x="10" y="140" fill="#9aa1ae">response of one cell (spikes)</text>
+          <g stroke="#f2b134" stroke-width="3">
+            <line x1="40" y1="160" x2="40" y2="190"/>
+            <line x1="150" y1="160" x2="150" y2="190"/><line x1="160" y1="160" x2="160" y2="190"/>
+            <line x1="250" y1="160" x2="250" y2="190"/><line x1="260" y1="160" x2="260" y2="190"/><line x1="270" y1="160" x2="270" y2="190"/><line x1="280" y1="160" x2="280" y2="190"/><line x1="290" y1="160" x2="290" y2="190"/><line x1="300" y1="160" x2="300" y2="190"/>
+            <line x1="380" y1="160" x2="380" y2="190"/><line x1="390" y1="160" x2="390" y2="190"/>
+          </g>
+          <line x1="10" y1="196" x2="550" y2="196" stroke="#5a606c"/>
+          <text x="10" y="236" fill="#e7e9ee">simple cell: one orientation, one place</text><text x="420" y="236" fill="#5ab0ff">≈ a filter</text>
+          <text x="10" y="262" fill="#e7e9ee">complex cell: one orientation, anywhere nearby</text><text x="420" y="262" fill="#5ab0ff">≈ pooling</text>
+          <text x="10" y="288" fill="#e7e9ee">areas V1 → V2 → V4 → IT: larger regions, more complex shapes</text><text x="482" y="288" fill="#5ab0ff">≈ depth</text>
+        </g>
+      </svg>
+    </div>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>Hubel &amp; Wiesel (1959–62), recording single neurons in the visual cortex of cats; Nobel Prize 1981</li>
+        <li>the cortex keeps the layout of the visual field (<b>topographic map</b>): neighbouring neurons see neighbouring regions</li>
+        <li>inspired Fukushima’s <b>Neocognitron</b> (1980) → LeCun’s convnets (1989)</li>
+      </ul>
+      <p class="small">An analogy and a historical source of ideas, not a model of the brain.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 4</div>
+  <h1>The ImageNet era</h1>
+</section>
+
+<section>
+  <h2>ImageNet: top-5 error of the winners</h2>
+  <div class="cols" style="grid-template-columns: 1.7fr 1fr; gap:1em; align-items:center">
+    <div data-widget="barchart" data-config='{"width":800,"height":300,"zoom":1.3,"panels":[{"yfmt":"pct","ymax":31,"hline":{"y":5.1,"label":["human annotator","5.1%"],"side":"right"},"bars":[{"label":"2010","value":28.2,"color":"#7d8594"},{"label":"2011","value":25.8,"color":"#7d8594"},{"label":"2012","value":16.4,"note":"AlexNet"},{"label":"2013","value":11.7,"note":"ZFNet"},{"label":"2014","value":6.7,"note":"GoogLeNet"},{"label":"2015","value":3.57,"text":"3.6%","note":"ResNet"},{"label":"2016","value":3.0,"text":"3.0%"},{"label":"2017","value":2.25,"text":"2.3%","note":"SENet"}]}]}'></div>
+    <div style="font-size:0.86em">
+      <ul>
+        <li>ILSVRC: 1.2 M training images, <b>1,000 classes</b> (incl. 120 dog breeds)</li>
+        <li>top-5 error: the right class is not among the 5 best guesses</li>
+        <li>grey: hand-designed features + linear classifiers; blue: convnets</li>
+        <li>human: one trained annotator, after practice (Karpathy, 2014)</li>
+      </ul>
+    </div>
+  </div>
+  <div style="display:flex; gap:10px; align-items:flex-start; margin-top:0.3em">
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/goldfish.jpg" alt="goldfish" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">goldfish</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/tabby.jpg" alt="tabby cat" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">tabby cat</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/zebra.jpg" alt="zebra" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">zebra</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/balloon.jpg" alt="balloon" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">balloon</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/school_bus.jpg" alt="school bus" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">school bus</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/container_ship.jpg" alt="container ship" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">container ship</figcaption></figure>
+    <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/espresso.jpg" alt="espresso" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">espresso</figcaption></figure>
+    <div style="border:1.5px dashed #f2b134; border-radius:6px; padding:4px 5px 0; margin-top:-5px">
+      <div style="display:flex; gap:8px">
+        <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/siberian_husky.jpg" alt="Siberian husky" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">Siberian husky</figcaption></figure>
+        <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/malamute.jpg" alt="malamute" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">malamute</figcaption></figure>
+        <figure style="margin:0; width:106px"><img src="../../assets/lecture06/imagenet/eskimo_dog.jpg" alt="Eskimo dog" style="width:106px; height:106px; border-radius:4px; display:block"><figcaption class="small" style="text-align:center; font-size:0.5em; line-height:1.2; margin-top:0.2em">Eskimo dog</figcaption></figure>
+      </div>
+      <div class="small" style="text-align:center; color:#f2b134; font-size:0.5em; margin-bottom:0.2em">three different classes</div>
+    </div>
+  </div>
+  <p class="credit">Sample images: ImageNetV2 (Recht et al., 2019), collected from Flickr with the ImageNet procedure, same 1,000 classes.</p>
+</section>
+
+<section>
+  <h2>AlexNet (Krizhevsky, Sutskever, Hinton, 2012)</h2>
+  <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":3,"label":"224×224×3"},{"type":"op","text":"conv 11×11","sub":"stride 4"},{"type":"vol","h":55,"w":55,"c":96,"label":"55×55×96"},{"type":"op","text":"pool"},{"type":"vol","h":27,"w":27,"c":256,"label":"27×27×256","sub":"conv 5×5"},{"type":"op","text":"pool"},{"type":"vol","h":13,"w":13,"c":384,"label":"13×13×384","sub":"conv 3×3"},{"type":"op","width":30},{"type":"vol","h":13,"w":13,"c":384,"label":"13×13×384"},{"type":"op","width":30},{"type":"vol","h":13,"w":13,"c":256,"label":"13×13×256"},{"type":"op","text":"pool"},{"type":"fc","n":4096,"size":130,"label":"4096"},{"type":"op","width":30},{"type":"fc","n":4096,"size":130,"label":"4096"},{"type":"op","width":30},{"type":"fc","n":1000,"size":95,"label":"1000","color":"#f2b134"}],"hs":4.2,"cs":1.1,"width":1180,"height":390}'></div>
+  <div class="cols c-3" style="font-size:0.8em; gap:0.8em">
+    <div class="box"><h3>data</h3>1.2 M labelled images (ImageNet)</div>
+    <div class="box"><h3>compute</h3>2 GTX 580 GPUs (3 GB each), 5–6 days</div>
+    <div class="box"><h3>algorithms</h3>ReLU, dropout, <b>data augmentation</b>; 60 M parameters</div>
+  </div>
+  <p style="font-size:0.83em; margin-top:0.5em">Top-5 error 16.4% vs 26.2% for the runner-up: the end of hand-designed features in vision.</p>
+</section>
+
+<section>
+  <h2>Data augmentation: same label, new image</h2>
+  <div data-widget="augment" data-config='{"src":"../../assets/lecture06/bison.jpg","mode":"row","n":7,"cols":7,"tile":150,"seed":3,"pipeline":true,"pipeTile":200}'></div>
+  <p style="font-size:0.8em; margin-top:0.2em">AlexNet: random 224×224 crops of 256×256 images + horizontal flips (2048× more images) + colour perturbation. Teaches the invariances that convolution does not build in.</p>
+  <p class="credit">Photo: WikiImages, Pixabay licence.</p>
+</section>
+
+<section>
+  <h2>Test-time augmentation</h2>
+  <div data-widget="tta" data-config='{"src":"../../assets/lecture06/bison.jpg","data":"../../assets/lecture06/data/tta_bison.json","tile":98,"orig":190}'></div>
+  <p style="font-size:0.83em; margin-top:0.4em">AlexNet averaged its predictions over 10 crops: the 4 corners, the centre, and their mirror images. Here: torchvision’s pretrained AlexNet on our photo; 4 crops say “water buffalo”, the <b>average</b> says “bison”.</p>
+  <p class="credit">Our run: <code>experiments/tta.py</code>.</p>
+</section>
+
+<section>
+  <h2>Check yourself</h2>
+  <div data-widget="slido" data-config='{"question":"Classifying handwritten digits: which augmentation is most likely to hurt?","options":["shift by 2 pixels","rotation by ±10°","rotation by 180°","brightness ×0.8 … 1.2"]}'></div>
+</section>
+
+<section>
+  <h2>Use augmentation consciously</h2>
+  <div class="cols c-3" style="gap:1.2em; margin-top:0.6em; text-align:center">
+    <div class="box">
+      <div style="font-size:3.2em; font-weight:700; line-height:1.1"><span>6</span> <span class="dim" style="font-size:0.5em">→</span> <span style="display:inline-block; transform:rotate(180deg)">6</span></div>
+      <p>rotation by 180° turns a 6 into a 9</p>
+    </div>
+    <div class="box">
+      <div style="font-size:3.2em; font-weight:700; line-height:1.1"><span>b</span> <span class="dim" style="font-size:0.5em">→</span> <span style="display:inline-block; transform:scaleX(-1)">b</span></div>
+      <p>a horizontal flip turns “b” into “d”</p>
+    </div>
+    <div class="box">
+      <svg viewBox="0 0 160 90" style="width:170px; height:96px; display:block; margin:0 auto">
+        <rect x="10" y="5" width="40" height="80" rx="8" fill="#272b34" stroke="#5a606c"/><circle cx="30" cy="25" r="11" fill="#ff6b6b"/><circle cx="30" cy="65" r="11" fill="#3a3f4b"/>
+        <text x="80" y="52" fill="#9aa1ae" font-size="22" text-anchor="middle">→</text>
+        <rect x="110" y="5" width="40" height="80" rx="8" fill="#272b34" stroke="#5a606c"/><circle cx="130" cy="25" r="11" fill="#5fd38d"/><circle cx="130" cy="65" r="11" fill="#3a3f4b"/>
+      </svg>
+      <p>a hue change turns “stop” into “go”</p>
+    </div>
+  </div>
+  <div class="takeaway" style="font-size:0.92em; margin-top:0.8em">An augmentation must not change the label. Widely used and effective, but which transformations are safe depends on the task.</div>
+</section>
+
+<section>
+  <h2>VGG (Simonyan &amp; Zisserman, 2014): two design rules</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.88em">
+    <div class="box">
+      <h3>1 · only 3×3 convolutions</h3>
+      <p>Two 3×3 layers see a 5×5 region, three see 7×7, with fewer weights ($C$ channels in and out):</p>
+      <table class="tbl" style="font-size:0.95em; width:100%">
+        <tr><th>sees</th><th class="num">one kernel</th><th class="num">stack of 3×3</th></tr>
+        <tr><td>5×5</td><td class="num">$25\,C^2$</td><td class="num">$2 \cdot 9\,C^2 = 18\,C^2$</td></tr>
+        <tr><td>7×7</td><td class="num">$49\,C^2$</td><td class="num">$3 \cdot 9\,C^2 = 27\,C^2$</td></tr>
+      </table>
+      <p>and a ReLU between them: more nonlinearity.</p>
+    </div>
+    <div class="box">
+      <h3>2 · halve the size, double the channels</h3>
+      <p>Cost of a $k \times k$ convolution on an $H \times W \times C$ volume (multiply-adds):</p>
+      $$H W C^2 k^2 \;=\; \tfrac{H}{2}\cdot\tfrac{W}{2}\cdot(2C)^2 k^2$$
+      <p>Every stage costs about the same; the network gets thinner and deeper in features.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>VGG-16</h2>
+  <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":64,"label":"224×224×64","sub":"2 conv"},{"type":"op","text":"pool","width":56},{"type":"vol","h":112,"w":112,"c":128,"label":"112×112×128","sub":"2 conv"},{"type":"op","text":"pool","width":56},{"type":"vol","h":56,"w":56,"c":256,"label":"56×56×256","sub":"3 conv"},{"type":"op","text":"pool","width":56},{"type":"vol","h":28,"w":28,"c":512,"label":"28×28×512","sub":"3 conv"},{"type":"op","text":"pool","width":56},{"type":"vol","h":14,"w":14,"c":512,"label":"14×14×512","sub":"3 conv"},{"type":"op","text":"pool","width":56},{"type":"vol","h":7,"w":7,"c":512,"label":"7×7×512"},{"type":"op","width":30},{"type":"fc","n":4096,"size":130,"label":"4096"},{"type":"op","width":30},{"type":"fc","n":4096,"size":130,"label":"4096"},{"type":"op","width":30},{"type":"fc","n":1000,"size":95,"label":"1000","color":"#f2b134"}],"hs":4.2,"cs":1.1,"width":1180,"height":390}'></div>
+  <ul style="font-size:0.88em">
+    <li>13 convolutions (all 3×3, stride 1, padding 1) + 5 max-pools + 3 dense layers = 16 weight layers</li>
+    <li><b>138 M</b> parameters; 7.3% top-5 error, 2nd in 2014; simple to implement, still a common baseline</li>
+    <li>trained 2–3 weeks on 4 GPUs; deeper versions were initialized from shallower ones (no batch norm yet)</li>
+  </ul>
+</section>
+
+<section>
+  <h2>VGG-16: memory, compute and parameters per layer</h2>
+  <div data-widget="barchart" data-config='{"layout": "column", "width": 1180, "height": 500, "zoom": 1.2, "panels": [{"title": "activations per image (MB, float32)", "bars": [{"label": "conv1_1", "value": 12.85, "text": "12.8", "color": "#5ab0ff"}, {"label": "conv1_2", "value": 12.85, "text": "12.8", "color": "#5ab0ff"}, {"label": "conv2_1", "value": 6.42, "text": "6.4", "color": "#5ab0ff"}, {"label": "conv2_2", "value": 6.42, "text": "6.4", "color": "#5ab0ff"}, {"label": "conv3_1", "value": 3.21, "text": "3.2", "color": "#5ab0ff"}, {"label": "conv3_2", "value": 3.21, "text": "3.2", "color": "#5ab0ff"}, {"label": "conv3_3", "value": 3.21, "text": "3.2", "color": "#5ab0ff"}, {"label": "conv4_1", "value": 1.61, "text": "1.6", "color": "#5ab0ff"}, {"label": "conv4_2", "value": 1.61, "text": "1.6", "color": "#5ab0ff"}, {"label": "conv4_3", "value": 1.61, "text": "1.6", "color": "#5ab0ff"}, {"label": "conv5_1", "value": 0.4, "text": "", "color": "#5ab0ff"}, {"label": "conv5_2", "value": 0.4, "text": "", "color": "#5ab0ff"}, {"label": "conv5_3", "value": 0.4, "text": "", "color": "#5ab0ff"}, {"label": "fc6", "value": 0.02, "text": "", "color": "#5ab0ff"}, {"label": "fc7", "value": 0.02, "text": "", "color": "#5ab0ff"}, {"label": "fc8", "value": 0.0, "text": "", "color": "#5ab0ff"}], "hideLabels": true, "yfmt": "num"}, {"title": "compute per image (billions of multiply-adds)", "bars": [{"label": "conv1_1", "value": 0.087, "text": "", "color": "#5fd38d"}, {"label": "conv1_2", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv2_1", "value": 0.925, "text": "0.92", "color": "#5fd38d"}, {"label": "conv2_2", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv3_1", "value": 0.925, "text": "0.92", "color": "#5fd38d"}, {"label": "conv3_2", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv3_3", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv4_1", "value": 0.925, "text": "0.92", "color": "#5fd38d"}, {"label": "conv4_2", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv4_3", "value": 1.85, "text": "1.85", "color": "#5fd38d"}, {"label": "conv5_1", "value": 0.462, "text": "0.46", "color": "#5fd38d"}, {"label": "conv5_2", "value": 0.462, "text": "0.46", "color": "#5fd38d"}, {"label": "conv5_3", "value": 0.462, "text": "0.46", "color": "#5fd38d"}, {"label": "fc6", "value": 0.103, "text": "", "color": "#5fd38d"}, {"label": "fc7", "value": 0.017, "text": "", "color": "#5fd38d"}, {"label": "fc8", "value": 0.004, "text": "", "color": "#5fd38d"}], "hideLabels": true, "yfmt": "num"}, {"title": "parameters (millions)", "bars": [{"label": "conv1_1", "value": 0.002, "text": "", "color": "#b28dff"}, {"label": "conv1_2", "value": 0.037, "text": "", "color": "#b28dff"}, {"label": "conv2_1", "value": 0.074, "text": "", "color": "#b28dff"}, {"label": "conv2_2", "value": 0.148, "text": "", "color": "#b28dff"}, {"label": "conv3_1", "value": 0.295, "text": "", "color": "#b28dff"}, {"label": "conv3_2", "value": 0.59, "text": "", "color": "#b28dff"}, {"label": "conv3_3", "value": 0.59, "text": "", "color": "#b28dff"}, {"label": "conv4_1", "value": 1.18, "text": "1.2", "color": "#b28dff"}, {"label": "conv4_2", "value": 2.36, "text": "2.4", "color": "#b28dff"}, {"label": "conv4_3", "value": 2.36, "text": "2.4", "color": "#b28dff"}, {"label": "conv5_1", "value": 2.36, "text": "2.4", "color": "#b28dff"}, {"label": "conv5_2", "value": 2.36, "text": "2.4", "color": "#b28dff"}, {"label": "conv5_3", "value": 2.36, "text": "2.4", "color": "#b28dff"}, {"label": "fc6", "value": 102.765, "text": "102.8", "color": "#b28dff"}, {"label": "fc7", "value": 16.781, "text": "16.8", "color": "#b28dff"}, {"label": "fc8", "value": 4.097, "text": "4.1", "color": "#b28dff"}], "yfmt": "num"}]}'></div>
+  <div class="takeaway" style="font-size:0.86em">Memory (activations) sits in the <b>early</b> layers; compute (15.5 G multiply-adds) is <b>spread over the stages</b> (rule 2; stage 5 stays at 512 channels); parameters sit in the <b>dense</b> layers (fc6: 103 M of 138 M, but only 0.1 G multiply-adds).</div>
+  <p class="credit">Counts from torchvision’s VGG-16: <code>experiments/arch_stats.py</code>.</p>
+</section>
+
+<section>
+  <h2>GoogLeNet (Szegedy et al., 2014): the inception module</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 600 330" style="width:100%">
+      <g font-family="Inter, Arial" font-size="16" text-anchor="middle">
+        <rect x="220" y="285" width="160" height="38" rx="8" fill="#272b34" stroke="#9aa1ae"/><text x="300" y="309" fill="#e7e9ee">previous layer</text>
+        <g stroke="#5a606c" stroke-width="2" fill="none">
+          <path d="M300 285 L75 245"/><path d="M300 285 L225 245"/><path d="M300 285 L375 245"/><path d="M300 285 L525 245"/>
+          <path d="M225 205 L225 165"/><path d="M375 205 L375 165"/><path d="M525 205 L525 165"/>
+          <path d="M75 245 L75 60"/><path d="M225 125 L300 60"/><path d="M375 125 L300 60"/><path d="M525 125 L300 60"/><path d="M75 60 L300 60"/>
+        </g>
+        <rect x="15" y="205" width="120" height="40" rx="8" fill="#15171c"/><rect x="15" y="205" width="120" height="40" rx="8" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="75" y="231" fill="#e7e9ee">1×1 conv</text>
+        <rect x="165" y="205" width="120" height="40" rx="8" fill="#15171c"/><rect x="165" y="205" width="120" height="40" rx="8" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="225" y="231" fill="#e7e9ee">1×1 conv</text>
+        <rect x="315" y="205" width="120" height="40" rx="8" fill="#15171c"/><rect x="315" y="205" width="120" height="40" rx="8" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="375" y="231" fill="#e7e9ee">1×1 conv</text>
+        <rect x="465" y="205" width="120" height="40" rx="8" fill="#15171c"/><rect x="465" y="205" width="120" height="40" rx="8" fill="#b28dff" fill-opacity="0.25" stroke="#b28dff"/><text x="525" y="231" fill="#e7e9ee">3×3 max pool</text>
+        <rect x="165" y="125" width="120" height="40" rx="8" fill="#15171c"/><rect x="165" y="125" width="120" height="40" rx="8" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d"/><text x="225" y="151" fill="#e7e9ee">3×3 conv</text>
+        <rect x="315" y="125" width="120" height="40" rx="8" fill="#15171c"/><rect x="315" y="125" width="120" height="40" rx="8" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d"/><text x="375" y="151" fill="#e7e9ee">5×5 conv</text>
+        <rect x="465" y="125" width="120" height="40" rx="8" fill="#15171c"/><rect x="465" y="125" width="120" height="40" rx="8" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="525" y="151" fill="#e7e9ee">1×1 conv</text>
+        <rect x="200" y="20" width="200" height="40" rx="8" fill="#15171c"/><rect x="200" y="20" width="200" height="40" rx="8" fill="#f2b134" fill-opacity="0.25" stroke="#f2b134"/><text x="300" y="46" fill="#e7e9ee">concatenate channels</text>
+      </g>
+    </svg>
+    <div style="font-size:0.86em">
+      <ul>
+        <li>several kernel sizes in parallel; the network picks what it needs</li>
+        <li><b>1×1 convolutions</b> shrink the channels before the expensive 3×3 and 5×5</li>
+      </ul>
+      <p>Example: 28×28×256 → 32 channels, 5×5</p>
+      <table class="tbl" style="font-size:0.92em">
+        <tr><td>directly</td><td class="num">5·5·256·32 = 204,800</td></tr>
+        <tr><td>1×1 to 16, then 5×5</td><td class="num">256·16 + 5·5·16·32 = 16,896</td></tr>
+      </table>
+      <p class="small">12× fewer weights (and multiply-adds)</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>GoogLeNet: no big dense layers</h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:center">
+    <div>
+      <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":7,"w":7,"c":1024,"label":"7×7×1024","sub":"last inception module"},{"type":"op","text":"average","sub":"each channel","width":110},{"type":"fc","n":1024,"size":150,"label":"1024"},{"type":"op","text":"dense","width":80},{"type":"fc","n":1000,"size":145,"label":"1000","color":"#f2b134"}],"hs":14,"cs":1.6,"width":620,"height":380}'></div>
+      <p class="cap"><b>global average pooling</b>: one number per channel; works for any input size</p>
+    </div>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>22 layers, 9 inception modules; 6.7% top-5 error, <b>winner of 2014</b></li>
+        <li>VGG’s first dense layer (7·7·512 → 4096) has 103 M weights; GoogLeNet’s only dense layer has 1 M</li>
+        <li>6.6 M parameters in total: 9× fewer than AlexNet, 20× fewer than VGG-16</li>
+        <li>two extra classifiers in the middle during training (next slide)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>GoogLeNet: two extra classifiers, only for training</h2>
+  <svg viewBox="0 0 1180 312" style="width:100%; display:block"><defs><marker id="garr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ff6b6b"/></marker></defs><g font-family="Inter, Arial"><rect x="10" y="60" width="70" height="46" rx="6" fill="#15171c"/><rect x="10" y="60" width="70" height="46" rx="6" fill="#9aa1ae" fill-opacity="0.22" stroke="#9aa1ae"/><text x="45.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">image</text><line x1="80" y1="83.0" x2="102" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="102" y="60" width="95" height="46" rx="6" fill="#15171c"/><rect x="102" y="60" width="95" height="46" rx="6" fill="#9aa1ae" fill-opacity="0.22" stroke="#9aa1ae"/><text x="149.5" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">stem</text><line x1="197" y1="83.0" x2="219" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="219" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="219" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="245.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">3a</text><line x1="271" y1="83.0" x2="293" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="293" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="293" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="319.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">3b</text><line x1="345" y1="83.0" x2="367" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="367" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="367" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="393.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">4a</text><line x1="419" y1="83.0" x2="441" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="441" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="441" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="467.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">4b</text><line x1="493" y1="83.0" x2="515" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="515" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="515" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="541.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">4c</text><line x1="567" y1="83.0" x2="589" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="589" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="589" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="615.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">4d</text><line x1="641" y1="83.0" x2="663" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="663" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="663" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="689.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">4e</text><line x1="715" y1="83.0" x2="737" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="737" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="737" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="763.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">5a</text><line x1="789" y1="83.0" x2="811" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="811" y="60" width="52" height="46" rx="6" fill="#15171c"/><rect x="811" y="60" width="52" height="46" rx="6" fill="#5ab0ff" fill-opacity="0.22" stroke="#5ab0ff"/><text x="837.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">5b</text><line x1="863" y1="83.0" x2="885" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="885" y="60" width="150" height="46" rx="6" fill="#15171c"/><rect x="885" y="60" width="150" height="46" rx="6" fill="#f2b134" fill-opacity="0.22" stroke="#f2b134"/><text x="960.0" y="79.5" fill="#e7e9ee" font-size="14" text-anchor="middle">avg pool, dense</text><text x="960.0" y="96.5" fill="#e7e9ee" font-size="14" text-anchor="middle">softmax</text><line x1="1035" y1="83.0" x2="1057" y2="83.0" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="1057" y="60" width="90" height="46" rx="6" fill="#15171c"/><rect x="1057" y="60" width="90" height="46" rx="6" fill="#ff6b6b" fill-opacity="0.22" stroke="#ff6b6b"/><text x="1102.0" y="88.0" fill="#e7e9ee" font-size="15" text-anchor="middle">loss L₀</text><text x="271.0" y="46" fill="#9aa1ae" font-size="14" text-anchor="middle" font-weight="400"></text><text x="541.0" y="46" fill="#9aa1ae" font-size="15" text-anchor="middle" font-weight="400">9 inception modules, 22 layers with weights</text><line x1="430" y1="83.0" x2="430" y2="160" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="350" y="160" width="160" height="46" rx="6" fill="#15171c"/><rect x="350" y="160" width="160" height="46" rx="6" fill="#f2b134" fill-opacity="0.22" stroke="#f2b134"/><text x="430.0" y="179.5" fill="#e7e9ee" font-size="13" text-anchor="middle">avg pool, 1×1 conv</text><text x="430.0" y="196.5" fill="#e7e9ee" font-size="13" text-anchor="middle">dense, softmax</text><line x1="430" y1="206" x2="430" y2="228" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="390" y="228" width="80" height="40" rx="6" fill="#15171c"/><rect x="390" y="228" width="80" height="40" rx="6" fill="#ff6b6b" fill-opacity="0.22" stroke="#ff6b6b"/><text x="430" y="253" fill="#e7e9ee" font-size="15" text-anchor="middle">loss L₁</text><line x1="652" y1="83.0" x2="652" y2="160" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="572" y="160" width="160" height="46" rx="6" fill="#15171c"/><rect x="572" y="160" width="160" height="46" rx="6" fill="#f2b134" fill-opacity="0.22" stroke="#f2b134"/><text x="652.0" y="179.5" fill="#e7e9ee" font-size="13" text-anchor="middle">avg pool, 1×1 conv</text><text x="652.0" y="196.5" fill="#e7e9ee" font-size="13" text-anchor="middle">dense, softmax</text><line x1="652" y1="206" x2="652" y2="228" stroke="#5a606c" stroke-width="2" opacity="1"/><rect x="612" y="228" width="80" height="40" rx="6" fill="#15171c"/><rect x="612" y="228" width="80" height="40" rx="6" fill="#ff6b6b" fill-opacity="0.22" stroke="#ff6b6b"/><text x="652" y="253" fill="#e7e9ee" font-size="15" text-anchor="middle">loss L₂</text><line x1="1067" y1="128" x2="821" y2="128" stroke="#ff6b6b" stroke-width="3" opacity="1" stroke-dasharray="7 5" marker-end="url(#garr)"/><line x1="821" y1="128" x2="599" y2="128" stroke="#ff6b6b" stroke-width="3" opacity="0.6" stroke-dasharray="7 5" marker-end="url(#garr)"/><line x1="599" y1="128" x2="377" y2="128" stroke="#ff6b6b" stroke-width="3" opacity="0.35" stroke-dasharray="7 5" marker-end="url(#garr)"/><line x1="377" y1="128" x2="112" y2="128" stroke="#ff6b6b" stroke-width="3" opacity="0.15" stroke-dasharray="7 5" marker-end="url(#garr)"/><text x="1102" y="150" fill="#ff6b6b" font-size="14" text-anchor="end" font-weight="400">gradient of L₀ alone:</text><text x="1102" y="168" fill="#ff6b6b" font-size="14" text-anchor="end" font-weight="400">weaker and weaker</text><line x1="452" y1="156" x2="452" y2="114" stroke="#ff6b6b" stroke-width="3" opacity="1" marker-end="url(#garr)"/><line x1="674" y1="156" x2="674" y2="114" stroke="#ff6b6b" stroke-width="3" opacity="1" marker-end="url(#garr)"/><text x="590" y="300" fill="#e7e9ee" font-size="16" text-anchor="middle" font-weight="400">training loss  L = L₀ + 0.3·L₁ + 0.3·L₂ ;  the two side heads are thrown away after training</text></g></svg>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.82em; margin-top:0.4em">
+    <ul>
+      <li>in 2014, 22 layers was very deep: with one loss at the top, the early layers got little gradient and trained slowly</li>
+      <li>the side heads inject gradient <b>into the middle</b> of the network</li>
+    </ul>
+    <ul>
+      <li>a workaround, not a fix: the training of deep networks was still fragile</li>
+      <li>2015: batch norm, then <b>ResNet</b>: 152 layers, one loss, no side heads (later today)</li>
+    </ul>
+  </div>
+</section>
+
+<section class="optional">
+  <h2>Batch normalization for convnets: one channel <span class="optional-badge">optional</span></h2>
+  <p style="font-size:0.85em; margin:0 0 0.3em">Recall (lecture 4): normalize each feature with the mean and variance over the mini-batch, then scale and shift:
+    $\;\hat x = \dfrac{x - \mu}{\sqrt{\sigma^2 + \epsilon}},\; y = \gamma\,\hat x + \beta$</p>
+  <div data-widget="bnviz" data-config='{"mlp":true,"n":4,"size":4,"cell":20}'></div>
+  <div class="takeaway" style="font-size:0.85em; margin-top:0.4em">In an MLP a feature (neuron) has <b>one number per example</b>. In a convnet a feature (channel) has <b>a whole map per example</b>: all $N\cdot H\cdot W$ of its values share one $\mu, \sigma^2$ and one $\gamma, \beta$.</div>
+</section>
+
+<section>
+  <h2>Batch normalization for convnets</h2>
+  <div class="cols" style="grid-template-columns: 1.35fr 1fr; gap:1.2em; align-items:center">
+    <div data-widget="bnviz" data-config='{"channels":3,"n":4,"size":4,"cell":17}'></div>
+    <div style="font-size:0.8em">
+      <p style="margin:0 0 0.3em">batch $N$ images, $C$ channels, each $H \times W$; for every channel $c$:</p>
+      $$\begin{aligned}
+        \mu_c &= \tfrac{1}{NHW} \textstyle\sum_{n,i,j} x_{n,c,i,j}\\
+        \sigma_c^2 &= \tfrac{1}{NHW} \textstyle\sum_{n,i,j} (x_{n,c,i,j} - \mu_c)^2\\
+        y_{n,c,i,j} &= \gamma_c\, \frac{x_{n,c,i,j} - \mu_c}{\sqrt{\sigma_c^2 + \epsilon}} + \beta_c
+      \end{aligned}$$
+      <p style="margin-top:0.3em">one row of the picture = one group: averaged over the <b>batch and all positions</b>, never across channels</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Batch normalization for convnets: why per channel?</h2>
+  <div class="cols" style="grid-template-columns: 1.05fr 1fr; gap:1.2em">
+    <div style="font-size:0.88em">
+      <ul>
+        <li>a channel is one filter applied at every position: normalizing it <b>the same way everywhere</b> keeps the layer a convolution (equivariant)</li>
+        <li>parameters: $\gamma, \beta$ per channel ($2C$), and running $\mu, \sigma^2$ per channel for test time</li>
+        <li>intuition: adjust the brightness and contrast of each feature map, using statistics from all images in the batch</li>
+        <li>convolution bias is redundant ($\beta$ does its job): <code>bias=False</code></li>
+      </ul>
+    </div>
+    <div>
+      <p class="small">the standard block since 2015</p>
+<pre class="code">nn.Sequential(
+    nn.Conv2d(64, 128, 3, padding=1, bias=False),
+    nn.BatchNorm2d(128),    <span class="c"># 128 γ, 128 β</span>
+    nn.ReLU(),
+)</pre>
+      <p style="font-size:0.8em">Ioffe &amp; Szegedy (2015): with batch norm the inception network trained 14× faster; it made the next step, very deep networks, trainable.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Deeper is not always better: the degradation problem</h2>
+  <div class="cols" style="grid-template-columns: 1.35fr 1fr; gap:1em; align-items:center">
+    <svg viewBox="0 0 700 320" style="width:100%; display:block"><g font-family="Inter, Arial"><rect x="50" y="40" width="240" height="230" fill="#1e2128" stroke="#3a3f4b"/><text x="50" y="30" fill="#e7e9ee" font-size="17" font-weight="600">training error</text><text x="42" y="54" fill="#9aa1ae" font-size="13" text-anchor="end">high</text><text x="42" y="270" fill="#9aa1ae" font-size="13" text-anchor="end">low</text><text x="290" y="290" fill="#9aa1ae" font-size="14" text-anchor="end">iterations →</text><line x1="170.0" y1="40" x2="170.0" y2="270" stroke="#3a3f4b" stroke-dasharray="3 4"/><line x1="230.0" y1="40" x2="230.0" y2="270" stroke="#3a3f4b" stroke-dasharray="3 4"/><path d="M50.0,51.5 L51.5,63.9 L53.0,75.2 L54.5,85.5 L56.0,95.0 L57.5,103.7 L59.0,111.6 L60.5,118.8 L62.0,125.5 L63.5,131.5 L65.0,137.1 L66.5,142.1 L68.0,146.8 L69.5,151.0 L71.0,154.9 L72.5,158.4 L74.0,161.7 L75.5,164.6 L77.0,167.4 L78.5,169.8 L80.0,172.1 L81.5,174.2 L83.0,176.1 L84.5,177.8 L86.0,179.4 L87.5,180.9 L89.0,182.2 L90.5,183.4 L92.0,184.5 L93.5,185.5 L95.0,186.5 L96.5,187.3 L98.0,188.1 L99.5,188.8 L101.0,189.4 L102.5,190.0 L104.0,190.6 L105.5,191.1 L107.0,191.5 L108.5,191.9 L110.0,192.3 L111.5,192.7 L113.0,193.0 L114.5,193.3 L116.0,193.5 L117.5,193.8 L119.0,194.0 L120.5,194.2 L122.0,194.4 L123.5,194.6 L125.0,194.7 L126.5,194.9 L128.0,195.0 L129.5,195.1 L131.0,195.2 L132.5,195.3 L134.0,195.4 L135.5,195.5 L137.0,195.6 L138.5,195.7 L140.0,195.7 L141.5,195.8 L143.0,195.8 L144.5,195.9 L146.0,195.9 L147.5,196.0 L149.0,196.0 L150.5,196.0 L152.0,196.1 L153.5,196.1 L155.0,196.1 L156.5,196.1 L158.0,196.2 L159.5,196.2 L161.0,196.2 L162.5,196.2 L164.0,196.2 L165.5,196.3 L167.0,196.3 L168.5,196.3 L170.0,196.3 L171.5,214.1 L173.0,224.6 L174.5,230.9 L176.0,234.6 L177.5,236.9 L179.0,238.2 L180.5,239.0 L182.0,239.4 L183.5,239.7 L185.0,239.9 L186.5,240.0 L188.0,240.0 L189.5,240.0 L191.0,240.1 L192.5,240.1 L194.0,240.1 L195.5,240.1 L197.0,240.1 L198.5,240.1 L200.0,240.1 L201.5,240.1 L203.0,240.1 L204.5,240.1 L206.0,240.1 L207.5,240.1 L209.0,240.1 L210.5,240.1 L212.0,240.1 L213.5,240.1 L215.0,240.1 L216.5,240.1 L218.0,240.1 L219.5,240.1 L221.0,240.1 L222.5,240.1 L224.0,240.1 L225.5,240.1 L227.0,240.1 L228.5,240.1 L230.0,240.1 L231.5,242.9 L233.0,244.6 L234.5,245.6 L236.0,246.1 L237.5,246.5 L239.0,246.7 L240.5,246.8 L242.0,246.9 L243.5,246.9 L245.0,247.0 L246.5,247.0 L248.0,247.0 L249.5,247.0 L251.0,247.0 L252.5,247.0 L254.0,247.0 L255.5,247.0 L257.0,247.0 L258.5,247.0 L260.0,247.0 L261.5,247.0 L263.0,247.0 L264.5,247.0 L266.0,247.0 L267.5,247.0 L269.0,247.0 L270.5,247.0 L272.0,247.0 L273.5,247.0 L275.0,247.0 L276.5,247.0 L278.0,247.0 L279.5,247.0 L281.0,247.0 L282.5,247.0 L284.0,247.0 L285.5,247.0 L287.0,247.0 L288.5,247.0 L290.0,247.0" fill="none" stroke="#5ab0ff" stroke-width="3"/><path d="M50.0,46.9 L51.5,57.3 L53.0,66.8 L54.5,75.5 L56.0,83.5 L57.5,90.8 L59.0,97.5 L60.5,103.6 L62.0,109.1 L63.5,114.2 L65.0,118.9 L66.5,123.1 L68.0,127.0 L69.5,130.6 L71.0,133.9 L72.5,136.9 L74.0,139.6 L75.5,142.1 L77.0,144.4 L78.5,146.5 L80.0,148.4 L81.5,150.1 L83.0,151.7 L84.5,153.2 L86.0,154.5 L87.5,155.7 L89.0,156.8 L90.5,157.9 L92.0,158.8 L93.5,159.6 L95.0,160.4 L96.5,161.1 L98.0,161.8 L99.5,162.4 L101.0,162.9 L102.5,163.4 L104.0,163.9 L105.5,164.3 L107.0,164.7 L108.5,165.1 L110.0,165.4 L111.5,165.7 L113.0,165.9 L114.5,166.2 L116.0,166.4 L117.5,166.6 L119.0,166.8 L120.5,167.0 L122.0,167.1 L123.5,167.3 L125.0,167.4 L126.5,167.5 L128.0,167.6 L129.5,167.7 L131.0,167.8 L132.5,167.9 L134.0,168.0 L135.5,168.0 L137.0,168.1 L138.5,168.2 L140.0,168.2 L141.5,168.3 L143.0,168.3 L144.5,168.4 L146.0,168.4 L147.5,168.4 L149.0,168.5 L150.5,168.5 L152.0,168.5 L153.5,168.5 L155.0,168.6 L156.5,168.6 L158.0,168.6 L159.5,168.6 L161.0,168.6 L162.5,168.6 L164.0,168.7 L165.5,168.7 L167.0,168.7 L168.5,168.7 L170.0,168.7 L171.5,187.4 L173.0,198.5 L174.5,205.1 L176.0,209.1 L177.5,211.4 L179.0,212.8 L180.5,213.6 L182.0,214.1 L183.5,214.4 L185.0,214.5 L186.5,214.7 L188.0,214.7 L189.5,214.7 L191.0,214.8 L192.5,214.8 L194.0,214.8 L195.5,214.8 L197.0,214.8 L198.5,214.8 L200.0,214.8 L201.5,214.8 L203.0,214.8 L204.5,214.8 L206.0,214.8 L207.5,214.8 L209.0,214.8 L210.5,214.8 L212.0,214.8 L213.5,214.8 L215.0,214.8 L216.5,214.8 L218.0,214.8 L219.5,214.8 L221.0,214.8 L222.5,214.8 L224.0,214.8 L225.5,214.8 L227.0,214.8 L228.5,214.8 L230.0,214.8 L231.5,217.6 L233.0,219.3 L234.5,220.3 L236.0,220.8 L237.5,221.2 L239.0,221.4 L240.5,221.5 L242.0,221.6 L243.5,221.6 L245.0,221.7 L246.5,221.7 L248.0,221.7 L249.5,221.7 L251.0,221.7 L252.5,221.7 L254.0,221.7 L255.5,221.7 L257.0,221.7 L258.5,221.7 L260.0,221.7 L261.5,221.7 L263.0,221.7 L264.5,221.7 L266.0,221.7 L267.5,221.7 L269.0,221.7 L270.5,221.7 L272.0,221.7 L273.5,221.7 L275.0,221.7 L276.5,221.7 L278.0,221.7 L279.5,221.7 L281.0,221.7 L282.5,221.7 L284.0,221.7 L285.5,221.7 L287.0,221.7 L288.5,221.7 L290.0,221.7" fill="none" stroke="#ff6b6b" stroke-width="3"/><text x="298" y="226.7" fill="#ff6b6b" font-size="15">56 layers</text><text x="298" y="252.0" fill="#5ab0ff" font-size="15">20 layers</text><rect x="400" y="40" width="200" height="230" fill="#1e2128" stroke="#3a3f4b"/><text x="400" y="30" fill="#e7e9ee" font-size="17" font-weight="600">test error</text><text x="392" y="54" fill="#9aa1ae" font-size="13" text-anchor="end">high</text><text x="392" y="270" fill="#9aa1ae" font-size="13" text-anchor="end">low</text><text x="600" y="290" fill="#9aa1ae" font-size="14" text-anchor="end">iterations →</text><line x1="500.0" y1="40" x2="500.0" y2="270" stroke="#3a3f4b" stroke-dasharray="3 4"/><line x1="550.0" y1="40" x2="550.0" y2="270" stroke="#3a3f4b" stroke-dasharray="3 4"/><path d="M400.0,51.5 L401.2,62.7 L402.5,72.9 L403.8,82.3 L405.0,90.9 L406.2,98.7 L407.5,105.9 L408.8,112.4 L410.0,118.4 L411.2,123.9 L412.5,128.9 L413.8,133.5 L415.0,137.7 L416.2,141.5 L417.5,145.0 L418.8,148.2 L420.0,151.2 L421.2,153.9 L422.5,156.3 L423.8,158.6 L425.0,160.6 L426.2,162.5 L427.5,164.2 L428.8,165.8 L430.0,167.2 L431.2,168.5 L432.5,169.7 L433.8,170.8 L435.0,171.8 L436.2,172.8 L437.5,173.6 L438.8,174.4 L440.0,175.1 L441.2,175.7 L442.5,176.3 L443.8,176.8 L445.0,177.3 L446.2,177.8 L447.5,178.2 L448.8,178.6 L450.0,178.9 L451.2,179.2 L452.5,179.5 L453.8,179.8 L455.0,180.0 L456.2,180.2 L457.5,180.4 L458.8,180.6 L460.0,180.8 L461.2,180.9 L462.5,181.1 L463.8,181.2 L465.0,181.3 L466.2,181.4 L467.5,181.5 L468.8,181.6 L470.0,181.7 L471.2,181.8 L472.5,181.9 L473.8,181.9 L475.0,182.0 L476.2,182.0 L477.5,182.1 L478.8,182.1 L480.0,182.2 L481.2,182.2 L482.5,182.2 L483.8,182.3 L485.0,182.3 L486.2,182.3 L487.5,182.3 L488.8,182.4 L490.0,182.4 L491.2,182.4 L492.5,182.4 L493.8,182.4 L495.0,182.5 L496.2,182.5 L497.5,182.5 L498.8,182.5 L500.0,182.5 L501.2,197.5 L502.5,206.4 L503.8,211.7 L505.0,214.8 L506.2,216.7 L507.5,217.8 L508.8,218.4 L510.0,218.8 L511.2,219.1 L512.5,219.2 L513.8,219.3 L515.0,219.3 L516.2,219.4 L517.5,219.4 L518.8,219.4 L520.0,219.4 L521.2,219.4 L522.5,219.4 L523.8,219.4 L525.0,219.4 L526.2,219.4 L527.5,219.4 L528.8,219.4 L530.0,219.4 L531.2,219.4 L532.5,219.4 L533.8,219.4 L535.0,219.4 L536.2,219.4 L537.5,219.4 L538.8,219.4 L540.0,219.4 L541.2,219.4 L542.5,219.4 L543.8,219.4 L545.0,219.4 L546.2,219.4 L547.5,219.4 L548.8,219.4 L550.0,219.4 L551.2,220.3 L552.5,220.9 L553.8,221.2 L555.0,221.4 L556.2,221.5 L557.5,221.6 L558.8,221.6 L560.0,221.7 L561.2,221.7 L562.5,221.7 L563.8,221.7 L565.0,221.7 L566.2,221.7 L567.5,221.7 L568.8,221.7 L570.0,221.7 L571.2,221.7 L572.5,221.7 L573.8,221.7 L575.0,221.7 L576.2,221.7 L577.5,221.7 L578.8,221.7 L580.0,221.7 L581.2,221.7 L582.5,221.7 L583.8,221.7 L585.0,221.7 L586.2,221.7 L587.5,221.7 L588.8,221.7 L590.0,221.7 L591.2,221.7 L592.5,221.7 L593.8,221.7 L595.0,221.7 L596.2,221.7 L597.5,221.7 L598.8,221.7 L600.0,221.7" fill="none" stroke="#5ab0ff" stroke-width="3"/><path d="M400.0,46.9 L401.2,56.5 L402.5,65.3 L403.8,73.4 L405.0,80.7 L406.2,87.5 L407.5,93.6 L408.8,99.3 L410.0,104.4 L411.2,109.1 L412.5,113.5 L413.8,117.4 L415.0,121.0 L416.2,124.3 L417.5,127.3 L418.8,130.1 L420.0,132.6 L421.2,134.9 L422.5,137.0 L423.8,138.9 L425.0,140.7 L426.2,142.3 L427.5,143.8 L428.8,145.1 L430.0,146.4 L431.2,147.5 L432.5,148.5 L433.8,149.5 L435.0,150.3 L436.2,151.1 L437.5,151.9 L438.8,152.5 L440.0,153.1 L441.2,153.7 L442.5,154.2 L443.8,154.6 L445.0,155.1 L446.2,155.5 L447.5,155.8 L448.8,156.1 L450.0,156.4 L451.2,156.7 L452.5,156.9 L453.8,157.2 L455.0,157.4 L456.2,157.6 L457.5,157.7 L458.8,157.9 L460.0,158.0 L461.2,158.2 L462.5,158.3 L463.8,158.4 L465.0,158.5 L466.2,158.6 L467.5,158.7 L468.8,158.8 L470.0,158.8 L471.2,158.9 L472.5,159.0 L473.8,159.0 L475.0,159.1 L476.2,159.1 L477.5,159.2 L478.8,159.2 L480.0,159.2 L481.2,159.3 L482.5,159.3 L483.8,159.3 L485.0,159.3 L486.2,159.4 L487.5,159.4 L488.8,159.4 L490.0,159.4 L491.2,159.4 L492.5,159.4 L493.8,159.5 L495.0,159.5 L496.2,159.5 L497.5,159.5 L498.8,159.5 L500.0,159.5 L501.2,175.4 L502.5,184.9 L503.8,190.5 L505.0,193.8 L506.2,195.8 L507.5,197.0 L508.8,197.7 L510.0,198.1 L511.2,198.3 L512.5,198.5 L513.8,198.6 L515.0,198.6 L516.2,198.7 L517.5,198.7 L518.8,198.7 L520.0,198.7 L521.2,198.7 L522.5,198.7 L523.8,198.7 L525.0,198.7 L526.2,198.7 L527.5,198.7 L528.8,198.7 L530.0,198.7 L531.2,198.7 L532.5,198.7 L533.8,198.7 L535.0,198.7 L536.2,198.7 L537.5,198.7 L538.8,198.7 L540.0,198.7 L541.2,198.7 L542.5,198.7 L543.8,198.7 L545.0,198.7 L546.2,198.7 L547.5,198.7 L548.8,198.7 L550.0,198.7 L551.2,199.6 L552.5,200.2 L553.8,200.5 L555.0,200.7 L556.2,200.8 L557.5,200.9 L558.8,200.9 L560.0,201.0 L561.2,201.0 L562.5,201.0 L563.8,201.0 L565.0,201.0 L566.2,201.0 L567.5,201.0 L568.8,201.0 L570.0,201.0 L571.2,201.0 L572.5,201.0 L573.8,201.0 L575.0,201.0 L576.2,201.0 L577.5,201.0 L578.8,201.0 L580.0,201.0 L581.2,201.0 L582.5,201.0 L583.8,201.0 L585.0,201.0 L586.2,201.0 L587.5,201.0 L588.8,201.0 L590.0,201.0 L591.2,201.0 L592.5,201.0 L593.8,201.0 L595.0,201.0 L596.2,201.0 L597.5,201.0 L598.8,201.0 L600.0,201.0" fill="none" stroke="#ff6b6b" stroke-width="3"/><text x="608" y="206.0" fill="#ff6b6b" font-size="15">56 layers</text><text x="608" y="226.7" fill="#5ab0ff" font-size="15">20 layers</text><text x="350" y="312" fill="#9aa1ae" font-size="13" text-anchor="middle">dashed verticals: the learning rate is divided by 10</text></g></svg>
+    <div style="font-size:0.8em">
+      <ul>
+        <li>plain convnets (conv, BN, ReLU) on CIFAR-10: 56 layers are worse than 20, <b>already on the training set</b></li>
+        <li>so it is <b>not overfitting</b> (that would be low training error, high test error)</li>
+        <li>a better solution exists (below), gradient descent does not find it: an <b>optimization</b> problem</li>
+      </ul>
+    </div>
+  </div>
+  <svg viewBox="0 0 1180 100" style="width:100%; display:block; margin-top:0.2em"><g font-family="Inter, Arial" font-size="16"><text x="140" y="27" fill="#5ab0ff" text-anchor="end">20 layers</text><rect x="150" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="164" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="178" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="192" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="206" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="220" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="234" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="248" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="262" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="276" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="290" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="304" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="318" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="332" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="346" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="360" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="374" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="388" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="402" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="416" y="6" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><text x="140" y="77" fill="#e7e9ee" text-anchor="end">56 layers</text><rect x="150" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="164" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="178" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="192" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="206" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="220" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="234" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="248" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="262" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="276" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="290" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="304" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="318" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="332" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="346" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="360" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="374" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="388" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="402" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="416" y="56" width="11" height="30" rx="2" fill="#5ab0ff" fill-opacity="0.5" stroke="#5ab0ff" stroke-width="1"/><rect x="430" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="444" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="458" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="472" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="486" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="500" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="514" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="528" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="542" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="556" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="570" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="584" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="598" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="612" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="626" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="640" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="654" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="668" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="682" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="696" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="710" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="724" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="738" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="752" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="766" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="780" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="794" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="808" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="822" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="836" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="850" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="864" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="878" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="892" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="906" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><rect x="920" y="56" width="11" height="30" rx="2" fill="#9aa1ae" fill-opacity="0.12" stroke="#9aa1ae" stroke-width="1" stroke-dasharray="3 2"/><text x="682" y="42" fill="#9aa1ae" text-anchor="middle">36 more layers set to the identity: the same function, the same error</text></g></svg>
+  <p class="credit">Schematic redrawn after He et al. (2016), Fig. 1 (curve shapes only, not their data); we did not rerun it: training 56-layer networks needs a GPU.</p>
+</section>
+
+<section>
+  <h2>ResNet (He et al., 2015): learn a correction to the identity</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.1fr; gap:1.2em; align-items:center">
+    <div style="font-size:0.84em">
+      <ul>
+        <li>a residual block computes $\mathbf{y} = F(\mathbf{x}) + \mathbf{x}$</li>
+        <li>$F = 0$ gives the identity: an extra block starts from “do nothing”, and only learns a correction</li>
+        <li>gradient: $\frac{\partial \mathbf{y}}{\partial \mathbf{x}} = \frac{\partial F}{\partial \mathbf{x}} + I$: the identity path passes it on unchanged</li>
+      </ul>
+      <svg viewBox="0 0 520 300" style="width:100%; display:block; margin-top:0.3em"><g font-family="Inter, Arial"><rect x="50" y="34" width="330" height="220" fill="#1e2128" stroke="#3a3f4b"/><text x="50" y="24" fill="#e7e9ee" font-size="17" font-weight="600">training error</text><text x="42" y="48" fill="#9aa1ae" font-size="13" text-anchor="end">high</text><text x="42" y="254" fill="#9aa1ae" font-size="13" text-anchor="end">low</text><text x="380" y="274" fill="#9aa1ae" font-size="14" text-anchor="end">iterations →</text><line x1="215.0" y1="34" x2="215.0" y2="254" stroke="#3a3f4b" stroke-dasharray="3 4"/><line x1="297.5" y1="34" x2="297.5" y2="254" stroke="#3a3f4b" stroke-dasharray="3 4"/><path d="M50.0,45.0 L52.1,56.8 L54.1,67.7 L56.2,77.6 L58.2,86.6 L60.3,94.9 L62.4,102.5 L64.4,109.4 L66.5,115.7 L68.6,121.5 L70.6,126.8 L72.7,131.7 L74.8,136.1 L76.8,140.2 L78.9,143.9 L80.9,147.3 L83.0,150.4 L85.1,153.2 L87.1,155.8 L89.2,158.2 L91.2,160.4 L93.3,162.3 L95.4,164.2 L97.4,165.8 L99.5,167.3 L101.6,168.7 L103.6,170.0 L105.7,171.2 L107.8,172.2 L109.8,173.2 L111.9,174.1 L113.9,174.9 L116.0,175.6 L118.1,176.3 L120.1,176.9 L122.2,177.5 L124.2,178.0 L126.3,178.5 L128.4,178.9 L130.4,179.3 L132.5,179.7 L134.6,180.0 L136.6,180.3 L138.7,180.6 L140.8,180.9 L142.8,181.1 L144.9,181.3 L146.9,181.5 L149.0,181.7 L151.1,181.9 L153.1,182.0 L155.2,182.1 L157.2,182.3 L159.3,182.4 L161.4,182.5 L163.4,182.6 L165.5,182.7 L167.6,182.7 L169.6,182.8 L171.7,182.9 L173.8,182.9 L175.8,183.0 L177.9,183.1 L179.9,183.1 L182.0,183.1 L184.1,183.2 L186.1,183.2 L188.2,183.3 L190.2,183.3 L192.3,183.3 L194.4,183.3 L196.4,183.4 L198.5,183.4 L200.6,183.4 L202.6,183.4 L204.7,183.4 L206.8,183.4 L208.8,183.5 L210.9,183.5 L212.9,183.5 L215.0,183.5 L217.1,200.5 L219.1,210.6 L221.2,216.6 L223.2,220.2 L225.3,222.3 L227.4,223.6 L229.4,224.3 L231.5,224.8 L233.6,225.0 L235.6,225.2 L237.7,225.3 L239.7,225.3 L241.8,225.4 L243.9,225.4 L245.9,225.4 L248.0,225.4 L250.1,225.4 L252.1,225.4 L254.2,225.4 L256.2,225.4 L258.3,225.4 L260.4,225.4 L262.4,225.4 L264.5,225.4 L266.6,225.4 L268.6,225.4 L270.7,225.4 L272.8,225.4 L274.8,225.4 L276.9,225.4 L278.9,225.4 L281.0,225.4 L283.1,225.4 L285.1,225.4 L287.2,225.4 L289.2,225.4 L291.3,225.4 L293.4,225.4 L295.4,225.4 L297.5,225.4 L299.6,228.1 L301.6,229.7 L303.7,230.6 L305.8,231.2 L307.8,231.5 L309.9,231.7 L311.9,231.8 L314.0,231.9 L316.1,231.9 L318.1,232.0 L320.2,232.0 L322.2,232.0 L324.3,232.0 L326.4,232.0 L328.4,232.0 L330.5,232.0 L332.6,232.0 L334.6,232.0 L336.7,232.0 L338.8,232.0 L340.8,232.0 L342.9,232.0 L344.9,232.0 L347.0,232.0 L349.1,232.0 L351.1,232.0 L353.2,232.0 L355.2,232.0 L357.3,232.0 L359.4,232.0 L361.4,232.0 L363.5,232.0 L365.6,232.0 L367.6,232.0 L369.7,232.0 L371.8,232.0 L373.8,232.0 L375.9,232.0 L377.9,232.0 L380.0,232.0" fill="none" stroke="#5ab0ff" stroke-width="3"/><path d="M50.0,40.6 L52.1,50.6 L54.1,59.7 L56.2,68.0 L58.2,75.6 L60.3,82.6 L62.4,89.0 L64.4,94.8 L66.5,100.1 L68.6,105.0 L70.6,109.5 L72.7,113.5 L74.8,117.3 L76.8,120.7 L78.9,123.8 L80.9,126.6 L83.0,129.3 L85.1,131.6 L87.1,133.8 L89.2,135.8 L91.2,137.6 L93.3,139.3 L95.4,140.8 L97.4,142.2 L99.5,143.5 L101.6,144.7 L103.6,145.8 L105.7,146.7 L107.8,147.6 L109.8,148.4 L111.9,149.2 L113.9,149.9 L116.0,150.5 L118.1,151.1 L120.1,151.6 L122.2,152.1 L124.2,152.5 L126.3,152.9 L128.4,153.3 L130.4,153.6 L132.5,153.9 L134.6,154.2 L136.6,154.5 L138.7,154.7 L140.8,154.9 L142.8,155.1 L144.9,155.3 L146.9,155.4 L149.0,155.6 L151.1,155.7 L153.1,155.9 L155.2,156.0 L157.2,156.1 L159.3,156.2 L161.4,156.3 L163.4,156.3 L165.5,156.4 L167.6,156.5 L169.6,156.5 L171.7,156.6 L173.8,156.7 L175.8,156.7 L177.9,156.7 L179.9,156.8 L182.0,156.8 L184.1,156.8 L186.1,156.9 L188.2,156.9 L190.2,156.9 L192.3,157.0 L194.4,157.0 L196.4,157.0 L198.5,157.0 L200.6,157.0 L202.6,157.0 L204.7,157.1 L206.8,157.1 L208.8,157.1 L210.9,157.1 L212.9,157.1 L215.0,157.1 L217.1,175.0 L219.1,185.6 L221.2,192.0 L223.2,195.7 L225.3,197.9 L227.4,199.3 L229.4,200.0 L231.5,200.5 L233.6,200.8 L235.6,201.0 L237.7,201.1 L239.7,201.1 L241.8,201.1 L243.9,201.2 L245.9,201.2 L248.0,201.2 L250.1,201.2 L252.1,201.2 L254.2,201.2 L256.2,201.2 L258.3,201.2 L260.4,201.2 L262.4,201.2 L264.5,201.2 L266.6,201.2 L268.6,201.2 L270.7,201.2 L272.8,201.2 L274.8,201.2 L276.9,201.2 L278.9,201.2 L281.0,201.2 L283.1,201.2 L285.1,201.2 L287.2,201.2 L289.2,201.2 L291.3,201.2 L293.4,201.2 L295.4,201.2 L297.5,201.2 L299.6,203.9 L301.6,205.5 L303.7,206.4 L305.8,207.0 L307.8,207.3 L309.9,207.5 L311.9,207.6 L314.0,207.7 L316.1,207.7 L318.1,207.8 L320.2,207.8 L322.2,207.8 L324.3,207.8 L326.4,207.8 L328.4,207.8 L330.5,207.8 L332.6,207.8 L334.6,207.8 L336.7,207.8 L338.8,207.8 L340.8,207.8 L342.9,207.8 L344.9,207.8 L347.0,207.8 L349.1,207.8 L351.1,207.8 L353.2,207.8 L355.2,207.8 L357.3,207.8 L359.4,207.8 L361.4,207.8 L363.5,207.8 L365.6,207.8 L367.6,207.8 L369.7,207.8 L371.8,207.8 L373.8,207.8 L375.9,207.8 L377.9,207.8 L380.0,207.8" fill="none" stroke="#ff6b6b" stroke-width="3"/><path d="M50.0,45.0 L52.1,57.8 L54.1,69.5 L56.2,80.2 L58.2,89.9 L60.3,98.9 L62.4,107.0 L64.4,114.5 L66.5,121.4 L68.6,127.6 L70.6,133.3 L72.7,138.6 L74.8,143.4 L76.8,147.7 L78.9,151.7 L80.9,155.4 L83.0,158.7 L85.1,161.8 L87.1,164.6 L89.2,167.2 L91.2,169.5 L93.3,171.7 L95.4,173.6 L97.4,175.4 L99.5,177.0 L101.6,178.5 L103.6,179.9 L105.7,181.2 L107.8,182.3 L109.8,183.4 L111.9,184.3 L113.9,185.2 L116.0,186.0 L118.1,186.7 L120.1,187.4 L122.2,188.0 L124.2,188.6 L126.3,189.1 L128.4,189.6 L130.4,190.0 L132.5,190.4 L134.6,190.8 L136.6,191.1 L138.7,191.4 L140.8,191.7 L142.8,191.9 L144.9,192.1 L146.9,192.3 L149.0,192.5 L151.1,192.7 L153.1,192.9 L155.2,193.0 L157.2,193.2 L159.3,193.3 L161.4,193.4 L163.4,193.5 L165.5,193.6 L167.6,193.7 L169.6,193.8 L171.7,193.8 L173.8,193.9 L175.8,194.0 L177.9,194.0 L179.9,194.1 L182.0,194.1 L184.1,194.1 L186.1,194.2 L188.2,194.2 L190.2,194.3 L192.3,194.3 L194.4,194.3 L196.4,194.3 L198.5,194.4 L200.6,194.4 L202.6,194.4 L204.7,194.4 L206.8,194.4 L208.8,194.4 L210.9,194.5 L212.9,194.5 L215.0,194.5 L217.1,212.4 L219.1,223.0 L221.2,229.4 L223.2,233.1 L225.3,235.3 L227.4,236.7 L229.4,237.4 L231.5,237.9 L233.6,238.2 L235.6,238.4 L237.7,238.5 L239.7,238.5 L241.8,238.5 L243.9,238.6 L245.9,238.6 L248.0,238.6 L250.1,238.6 L252.1,238.6 L254.2,238.6 L256.2,238.6 L258.3,238.6 L260.4,238.6 L262.4,238.6 L264.5,238.6 L266.6,238.6 L268.6,238.6 L270.7,238.6 L272.8,238.6 L274.8,238.6 L276.9,238.6 L278.9,238.6 L281.0,238.6 L283.1,238.6 L285.1,238.6 L287.2,238.6 L289.2,238.6 L291.3,238.6 L293.4,238.6 L295.4,238.6 L297.5,238.6 L299.6,241.3 L301.6,242.9 L303.7,243.8 L305.8,244.4 L307.8,244.7 L309.9,244.9 L311.9,245.0 L314.0,245.1 L316.1,245.1 L318.1,245.2 L320.2,245.2 L322.2,245.2 L324.3,245.2 L326.4,245.2 L328.4,245.2 L330.5,245.2 L332.6,245.2 L334.6,245.2 L336.7,245.2 L338.8,245.2 L340.8,245.2 L342.9,245.2 L344.9,245.2 L347.0,245.2 L349.1,245.2 L351.1,245.2 L353.2,245.2 L355.2,245.2 L357.3,245.2 L359.4,245.2 L361.4,245.2 L363.5,245.2 L365.6,245.2 L367.6,245.2 L369.7,245.2 L371.8,245.2 L373.8,245.2 L375.9,245.2 L377.9,245.2 L380.0,245.2" fill="none" stroke="#f2b134" stroke-width="3"/><text x="388" y="212.8" fill="#ff6b6b" font-size="15">plain-56</text><text x="388" y="237.0" fill="#5ab0ff" font-size="15">plain-20</text><text x="388" y="254.6" fill="#f2b134" font-size="15">ResNet-56</text></g></svg>
+    </div>
+    <svg viewBox="0 0 470 300" style="width:100%">
+      <g font-family="Inter, Arial" font-size="15" text-anchor="middle">
+        <text x="105" y="20" fill="#9aa1ae">plain block</text>
+        <g stroke="#5a606c" stroke-width="2"><line x1="105" y1="40" x2="105" y2="280"/></g>
+        <rect x="45" y="70" width="120" height="36" rx="7" fill="#15171c"/><rect x="45" y="70" width="120" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="105" y="93" fill="#e7e9ee">conv, BN, ReLU</text>
+        <rect x="45" y="140" width="120" height="36" rx="7" fill="#15171c"/><rect x="45" y="140" width="120" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="105" y="163" fill="#e7e9ee">conv, BN</text>
+        <rect x="45" y="215" width="120" height="30" rx="7" fill="#272b34" stroke="#9aa1ae"/><text x="105" y="235" fill="#e7e9ee">ReLU</text>
+        <text x="105" y="296" fill="#e7e9ee">H(x)</text><text x="125" y="40" fill="#e7e9ee">x</text>
+        <text x="330" y="20" fill="#9aa1ae">residual block</text>
+        <g stroke="#5a606c" stroke-width="2" fill="none"><line x1="300" y1="40" x2="300" y2="280"/><path d="M300 50 L420 50 L420 200 L312 200"/></g>
+        <rect x="240" y="70" width="120" height="36" rx="7" fill="#15171c"/><rect x="240" y="70" width="120" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="300" y="93" fill="#e7e9ee">conv, BN, ReLU</text>
+        <rect x="240" y="140" width="120" height="36" rx="7" fill="#15171c"/><rect x="240" y="140" width="120" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="300" y="163" fill="#e7e9ee">conv, BN</text>
+        <circle cx="300" cy="200" r="12" fill="#272b34" stroke="#f2b134" stroke-width="2"/><text x="300" y="205" fill="#f2b134" font-weight="700">+</text>
+        <rect x="240" y="225" width="120" height="30" rx="7" fill="#272b34" stroke="#9aa1ae"/><text x="300" y="245" fill="#e7e9ee">ReLU</text>
+        <text x="428" y="130" fill="#f2b134" text-anchor="start">x</text><text x="404" y="235" fill="#f2b134" text-anchor="start" font-size="14">identity</text>
+        <text x="215" y="125" fill="#e7e9ee" text-anchor="end">F(x)</text>
+        <text x="300" y="296" fill="#e7e9ee">F(x) + x</text><text x="320" y="40" fill="#e7e9ee">x</text>
+      </g>
+    </svg>
+  </div>
+  <p class="credit">Schematic redrawn after He et al. (2016) (curve shapes only, not their data).</p>
+</section>
+
+<section>
+  <h2>ResNet blocks</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 620 380" style="width:100%">
+      <g font-family="Inter, Arial" font-size="16" text-anchor="middle">
+        <text x="150" y="22" fill="#5ab0ff" font-weight="600">basic block (ResNet-18, -34)</text>
+        <text x="460" y="22" fill="#f2b134" font-weight="600">bottleneck (ResNet-50, -101, -152)</text>
+        <g stroke="#5a606c" stroke-width="2" fill="none">
+          <line x1="150" y1="44" x2="150" y2="320"/><path d="M150 52 L262 52 L262 270 L162 270"/>
+          <line x1="460" y1="44" x2="460" y2="320"/><path d="M460 52 L590 52 L590 270 L472 270"/>
+        </g>
+        <rect x="60" y="80" width="180" height="40" rx="7" fill="#15171c"/><rect x="60" y="80" width="180" height="40" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="150" y="106" fill="#e7e9ee">3×3 conv, 256</text>
+        <rect x="60" y="170" width="180" height="40" rx="7" fill="#15171c"/><rect x="60" y="170" width="180" height="40" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="150" y="196" fill="#e7e9ee">3×3 conv, 256</text>
+        <rect x="390" y="70" width="140" height="36" rx="7" fill="#15171c"/><rect x="390" y="70" width="140" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="460" y="94" fill="#e7e9ee">1×1 conv, 64</text>
+        <rect x="415" y="135" width="90" height="36" rx="7" fill="#15171c"/><rect x="415" y="135" width="90" height="36" rx="7" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d"/><text x="460" y="159" fill="#e7e9ee">3×3, 64</text>
+        <rect x="370" y="200" width="180" height="36" rx="7" fill="#15171c"/><rect x="370" y="200" width="180" height="36" rx="7" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="460" y="224" fill="#e7e9ee">1×1 conv, 256</text>
+        <circle cx="150" cy="270" r="12" fill="#272b34" stroke="#f2b134" stroke-width="2"/><text x="150" y="275" fill="#f2b134" font-weight="700">+</text>
+        <circle cx="460" cy="270" r="12" fill="#272b34" stroke="#f2b134" stroke-width="2"/><text x="460" y="275" fill="#f2b134" font-weight="700">+</text>
+        <text x="276" y="160" fill="#f2b134" text-anchor="start" font-size="14">x</text><text x="604" y="160" fill="#f2b134" text-anchor="end" font-size="14">x</text>
+        <text x="150" y="350" fill="#e7e9ee">2·9·256² = 1,179,648</text>
+        <text x="460" y="350" fill="#e7e9ee">256·64 + 9·64² + 64·256 = 69,632</text>
+        <text x="460" y="372" fill="#f2b134" font-weight="600">17× fewer weights</text>
+        <text x="150" y="372" fill="#9aa1ae" font-size="14">weights, 256 channels in and out</text>
+      </g>
+    </svg>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>every convolution is followed by batch norm; ReLU after the sum</li>
+        <li>bottleneck: 1×1 shrinks to 64 channels, the 3×3 works on few channels, 1×1 expands back (as in GoogLeNet)</li>
+        <li>when the shape changes (stride 2, more channels), the shortcut is a <b>1×1 convolution with stride 2</b> instead of the identity</li>
+        <li>no dense layers except the last one, after global average pooling</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>ResNet-50, stage by stage</h2>
+  <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":3,"label":"224×224×3"},{"type":"op","text":"conv 7×7/2","sub":"+ max pool","width":96},{"type":"vol","h":56,"w":56,"c":256,"label":"56×56×256","sub":"3 blocks"},{"type":"op","width":44},{"type":"vol","h":28,"w":28,"c":512,"label":"28×28×512","sub":"4 blocks"},{"type":"op","width":44},{"type":"vol","h":14,"w":14,"c":1024,"label":"14×14×1024","sub":"6 blocks"},{"type":"op","width":44},{"type":"vol","h":7,"w":7,"c":2048,"label":"7×7×2048","sub":"3 blocks"},{"type":"op","text":"avg pool","width":80},{"type":"fc","n":2048,"size":130,"label":"2048"},{"type":"op","width":40},{"type":"fc","n":1000,"size":120,"label":"1000","color":"#f2b134"}],"hs":5.2,"cs":1.0,"width":1180,"height":290}'></div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.95em">
+    <table class="tbl">
+      <tr><th>part</th><th class="num">blocks</th><th class="num">parameters</th></tr>
+      <tr><td>stem (7×7 conv)</td><td class="num"></td><td class="num">9.5 k</td></tr>
+      <tr><td>stage 1, 56×56×256</td><td class="num">3</td><td class="num">0.22 M</td></tr>
+      <tr><td>stage 2, 28×28×512</td><td class="num">4</td><td class="num">1.22 M</td></tr>
+      <tr><td>stage 3, 14×14×1024</td><td class="num">6</td><td class="num">7.10 M</td></tr>
+      <tr><td>stage 4, 7×7×2048</td><td class="num">3</td><td class="num">14.96 M</td></tr>
+      <tr><td>dense 2048 → 1000</td><td class="num"></td><td class="num">2.05 M</td></tr>
+      <tr><td><b>total</b></td><td class="num">16</td><td class="num"><b>25.6 M</b></td></tr>
+    </table>
+    <table class="tbl">
+      <tr><th></th><th class="num">params</th><th class="num">mult-adds</th><th class="num">top-1</th></tr>
+      <tr><td>AlexNet</td><td class="num">61.1 M</td><td class="num">0.7 G</td><td class="num">56.5%</td></tr>
+      <tr><td>VGG-16</td><td class="num">138.4 M</td><td class="num">15.5 G</td><td class="num">71.6%</td></tr>
+      <tr><td>GoogLeNet</td><td class="num">6.6 M</td><td class="num">1.5 G</td><td class="num">69.8%</td></tr>
+      <tr><td>ResNet-18</td><td class="num">11.7 M</td><td class="num">1.8 G</td><td class="num">69.8%</td></tr>
+      <tr><td>ResNet-50</td><td class="num">25.6 M</td><td class="num">4.1 G</td><td class="num">76.1%</td></tr>
+      <tr><td>ResNet-152</td><td class="num">60.2 M</td><td class="num">11.5 G</td><td class="num">78.3%</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Convnets today</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.88em">
+    <div class="box">
+      <h3>Vision Transformer (2020)</h3>
+      <p>Cut the image into 16×16 patches, treat them as words, use a transformer (lectures 9–10). Its first layer is… a convolution:</p>
+      <pre class="code" style="font-size:0.66em">nn.Conv2d(3, 768, kernel_size=16, stride=16)</pre>
+      <p>Fewer built-in assumptions: needs more data, wins with very large data.</p>
+    </div>
+    <div class="box">
+      <h3>ConvNeXt (2022)</h3>
+      <p>A ResNet, modernized step by step (larger kernels, training recipes of transformers), matches transformers on ImageNet.</p>
+      <h3 style="margin-top:0.6em">still the default for</h3>
+      <p>segmentation and detection (lecture 7), phones and robots, the denoising network of diffusion models (UNet)</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Side note: 10 years of papers on one test set</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; align-items:center">
+    <div data-widget="scatter" data-config='{"src":"../../assets/lecture06/data/imagenetv2.json","path":"models","x":"orig_top1","y":"v2_top1","xlabel":"top-1 accuracy, original ImageNet validation set","ylabel":"top-1 accuracy, new test set (ImageNetV2)","min":0.4,"max":0.85,"width":560,"height":430,"place":{"AlexNet (2012)":"r","GoogLeNet (2014)":"la","VGG-16 (2014)":"r","ResNet-18 (2015)":"rb","ResNet-50 (2015)":"l","ResNet-152 (2015)":"l"}}'></div>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>architectures were chosen by their score on the <b>same</b> validation set: overfitting to it?</li>
+        <li>Recht et al. (2019) collected a <b>new</b> test set following the original procedure</li>
+        <li>every model loses 11–13 points, but the <b>ranking is preserved</b>, on a straight line</li>
+        <li>progress is real; the new images are harder</li>
+      </ul>
+      <p class="small">Our run: torchvision models on ImageNetV2, <code>experiments/imagenetv2.py</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Summary</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.9em">
+    <div>
+      <ul>
+        <li>convolution = dense layer + <b>locality</b> + <b>weight sharing</b>: a prior for images</li>
+        <li>kernels are learned; a layer maps a volume $H \times W \times C_\text{in}$ to $H' \times W' \times C_\text{out}$</li>
+        <li>output size $\lfloor (n + 2p - k)/s \rfloor + 1$; parameters $C_\text{out}(C_\text{in} k^2 + 1)$</li>
+        <li>equivariant to shifts; pooling and augmentation add invariances</li>
+      </ul>
+    </div>
+    <div>
+      <table class="tbl" style="font-size:0.92em">
+        <tr><th></th><th>new idea</th></tr>
+        <tr><td>LeNet 1998</td><td>conv → pool → dense</td></tr>
+        <tr><td>AlexNet 2012</td><td>data + GPUs, ReLU, dropout, augmentation</td></tr>
+        <tr><td>VGG 2014</td><td>only 3×3, double channels when halving size</td></tr>
+        <tr><td>GoogLeNet 2014</td><td>1×1 bottlenecks, global average pooling</td></tr>
+        <tr><td>ResNet 2015</td><td>batch norm + residual blocks: 150+ layers</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Next</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; margin-top:0.6em">
+    <div class="box"><h3>Lecture 7 (Wed, Nov 18)</h3><p>Convnets that output images and boxes: UNet, object detection.</p></div>
+  </div>
+</section>
+
+<section id="feedback" class="title-slide">
+  <h1>Feedback</h1>
+  <div style="display:flex; align-items:center; gap:1.5em; margin-top:0.5em">
+    <img src="../../assets/feedback-qr.svg" alt="QR code linking to tinyurl.com/mimuw-dnn-feedback" style="width:340px; height:340px; box-sizing:content-box; padding:18px; background:#fff; border-radius:8px; margin:0">
+    <div>
+      <p>Please spend a minute: your feedback helps me improve the next lecture.</p>
+      <p style="font-family:var(--mono); font-size:1.1em"><a href="https://tinyurl.com/mimuw-dnn-feedback">tinyurl.com/mimuw-dnn-feedback</a></p>
+      <p class="small">Anonymous, no login, three questions.</p>
+    </div>
+  </div>
+</section>
+
+</div></div>
+<script type="module" src="../../shared/deck.js"></script>
+</body>
+</html>

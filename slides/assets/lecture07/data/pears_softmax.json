@@ -1,0 +1,131 @@
+{
+ "model": "torchvision maskrcnn_resnet50_fpn_v2 (COCO), box head softmax on the true boxes",
+ "n_outputs": 91,
+ "n_classes": 80,
+ "objects": [
+  {
+   "name": "pear 1",
+   "b": [
+    115,
+    127,
+    299,
+    412
+   ],
+   "top": [
+    {
+     "c": "apple",
+     "p": 0.523
+    },
+    {
+     "c": "banana",
+     "p": 0.388
+    },
+    {
+     "c": "background",
+     "p": 0.078
+    },
+    {
+     "c": "orange",
+     "p": 0.008
+    },
+    {
+     "c": "vase",
+     "p": 0.001
+    }
+   ]
+  },
+  {
+   "name": "pear 2",
+   "b": [
+    300,
+    194,
+    482,
+    409
+   ],
+   "top": [
+    {
+     "c": "apple",
+     "p": 0.552
+    },
+    {
+     "c": "background",
+     "p": 0.444
+    },
+    {
+     "c": "orange",
+     "p": 0.002
+    },
+    {
+     "c": "banana",
+     "p": 0.001
+    },
+    {
+     "c": "vase",
+     "p": 0.0
+    }
+   ]
+  },
+  {
+   "name": "pear 3",
+   "b": [
+    485,
+    206,
+    668,
+    410
+   ],
+   "top": [
+    {
+     "c": "background",
+     "p": 0.767
+    },
+    {
+     "c": "apple",
+     "p": 0.211
+    },
+    {
+     "c": "banana",
+     "p": 0.013
+    },
+    {
+     "c": "orange",
+     "p": 0.006
+    },
+    {
+     "c": "broccoli",
+     "p": 0.001
+    }
+   ]
+  },
+  {
+   "name": "apple",
+   "b": [
+    669,
+    235,
+    837,
+    414
+   ],
+   "top": [
+    {
+     "c": "apple",
+     "p": 0.988
+    },
+    {
+     "c": "background",
+     "p": 0.012
+    },
+    {
+     "c": "orange",
+     "p": 0.0
+    },
+    {
+     "c": "sports ball",
+     "p": 0.0
+    },
+    {
+     "c": "donut",
+     "p": 0.0
+    }
+   ]
+  }
+ ]
+}

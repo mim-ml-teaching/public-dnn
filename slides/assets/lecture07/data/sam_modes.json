@@ -1,0 +1,78 @@
+{
+ "model": "SAM ViT-B (sam_vit_b_01ec64)",
+ "panels": {
+  "everything": {
+   "src": "crowd.jpg",
+   "size": [
+    960,
+    453
+   ],
+   "n": 170,
+   "seconds": 53.9,
+   "overlay": "sam_everything.png"
+  },
+  "box": {
+   "src": "street.jpg",
+   "size": [
+    960,
+    640
+   ],
+   "score": 0.941,
+   "boxes": [
+    {
+     "b": [
+      768,
+      341,
+      960,
+      634
+     ],
+     "color": "#f2b134",
+     "dash": true
+    }
+   ],
+   "overlay": "sam_box.png"
+  },
+  "clicks": {
+   "src": "pears.jpg",
+   "size": [
+    960,
+    542
+   ],
+   "score": 0.975,
+   "points": [
+    {
+     "x": 395,
+     "y": 320,
+     "pos": true
+    },
+    {
+     "x": 577,
+     "y": 320,
+     "pos": true
+    },
+    {
+     "x": 752,
+     "y": 330,
+     "pos": false
+    }
+   ],
+   "overlay": "sam_clicks.png"
+  },
+  "part": {
+   "src": "pears.jpg",
+   "size": [
+    960,
+    542
+   ],
+   "score": 0.931,
+   "points": [
+    {
+     "x": 425,
+     "y": 140,
+     "pos": true
+    }
+   ],
+   "overlay": "sam_part.png"
+  }
+ }
+}

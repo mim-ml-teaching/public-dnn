@@ -1,0 +1,178 @@
+{
+ "model": "OWLv2 base/16 ensemble + SAM ViT-B",
+ "owl_s": 5.2,
+ "panels": {
+  "pears": {
+   "src": "pears.jpg",
+   "size": [
+    960,
+    542
+   ],
+   "prompts": [
+    {
+     "text": "a pear",
+     "color": "#5fd38d"
+    },
+    {
+     "text": "an apple",
+     "color": "#ff6b6b"
+    }
+   ],
+   "boxes": [
+    {
+     "b": [
+      116,
+      127,
+      299,
+      412
+     ],
+     "score": 0.74,
+     "label": "a pear",
+     "color": "#5fd38d"
+    },
+    {
+     "b": [
+      482,
+      142,
+      672,
+      412
+     ],
+     "score": 0.71,
+     "label": "a pear",
+     "color": "#5fd38d"
+    },
+    {
+     "b": [
+      299,
+      119,
+      486,
+      410
+     ],
+     "score": 0.7,
+     "label": "a pear",
+     "color": "#5fd38d"
+    },
+    {
+     "b": [
+      668,
+      231,
+      839,
+      416
+     ],
+     "score": 0.72,
+     "label": "an apple",
+     "color": "#ff6b6b"
+    }
+   ],
+   "overlay": "ov_pears.png"
+  },
+  "crowd": {
+   "src": "crowd.jpg",
+   "size": [
+    960,
+    453
+   ],
+   "prompts": [
+    {
+     "text": "an umbrella",
+     "color": "#5ab0ff"
+    },
+    {
+     "text": "a man in a floral shirt",
+     "color": "#f2b134"
+    },
+    {
+     "text": "a hat",
+     "color": "#b28dff"
+    }
+   ],
+   "boxes": [
+    {
+     "b": [
+      215,
+      113,
+      334,
+      177
+     ],
+     "score": 0.52,
+     "label": "an umbrella",
+     "color": "#5ab0ff"
+    },
+    {
+     "b": [
+      802,
+      133,
+      881,
+      246
+     ],
+     "score": 0.37,
+     "label": "a man in a floral shirt",
+     "color": "#f2b134"
+    },
+    {
+     "b": [
+      389,
+      117,
+      423,
+      144
+     ],
+     "score": 0.35,
+     "label": "a hat",
+     "color": "#b28dff"
+    },
+    {
+     "b": [
+      487,
+      122,
+      518,
+      152
+     ],
+     "score": 0.32,
+     "label": "a hat",
+     "color": "#b28dff"
+    }
+   ]
+  },
+  "street": {
+   "src": "street.jpg",
+   "size": [
+    960,
+    640
+   ],
+   "prompts": [
+    {
+     "text": "a crane",
+     "color": "#f2b134"
+    },
+    {
+     "text": "a hotel sign",
+     "color": "#5fd38d"
+    }
+   ],
+   "boxes": [
+    {
+     "b": [
+      588,
+      90,
+      632,
+      107
+     ],
+     "score": 0.52,
+     "label": "a crane",
+     "color": "#f2b134"
+    },
+    {
+     "b": [
+      751,
+      93,
+      795,
+      115
+     ],
+     "score": 0.32,
+     "label": "a hotel sign",
+     "color": "#5fd38d"
+    }
+   ]
+  }
+ }
+}

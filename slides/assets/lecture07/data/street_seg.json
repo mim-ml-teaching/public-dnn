@@ -1,0 +1,41 @@
+{
+ "size": [
+  960,
+  640
+ ],
+ "model": "torchvision deeplabv3_resnet50 (COCO_WITH_VOC_LABELS_V1)",
+ "logits_size": [
+  80,
+  120
+ ],
+ "coarse_size": [
+  20,
+  30
+ ],
+ "classes": [
+  {
+   "id": 0,
+   "name": "__background__",
+   "color": "#9aa1ae",
+   "frac_fine": 0.7523
+  },
+  {
+   "id": 6,
+   "name": "bus",
+   "color": "#f2b134",
+   "frac_fine": 0.071
+  },
+  {
+   "id": 7,
+   "name": "car",
+   "color": "#5ab0ff",
+   "frac_fine": 0.0471
+  },
+  {
+   "id": 15,
+   "name": "person",
+   "color": "#ff6b6b",
+   "frac_fine": 0.1296
+  }
+ ]
+}

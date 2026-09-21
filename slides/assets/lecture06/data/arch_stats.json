@@ -1,0 +1,756 @@
+{
+ "lenet5": {
+  "input": [
+   1,
+   32,
+   32
+  ],
+  "layers": [
+   {
+    "type": "Conv2d",
+    "out": [
+     6,
+     28,
+     28
+    ],
+    "params": 156,
+    "act": 4704,
+    "macs": 117600,
+    "kernel": [
+     5,
+     5
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     6,
+     14,
+     14
+    ],
+    "params": 0,
+    "act": 1176,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     16,
+     10,
+     10
+    ],
+    "params": 2416,
+    "act": 1600,
+    "macs": 240000,
+    "kernel": [
+     5,
+     5
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     16,
+     5,
+     5
+    ],
+    "params": 0,
+    "act": 400,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Linear",
+    "out": [
+     120
+    ],
+    "params": 48120,
+    "act": 120,
+    "macs": 48000,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     84
+    ],
+    "params": 10164,
+    "act": 84,
+    "macs": 10080,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     10
+    ],
+    "params": 850,
+    "act": 10,
+    "macs": 840,
+    "kernel": null,
+    "stride": null
+   }
+  ],
+  "params": 61706,
+  "macs": 416520
+ },
+ "alexnet": {
+  "params": 61100840,
+  "macs": 714188480,
+  "top1": 56.522,
+  "top5": 79.066,
+  "layers": [
+   {
+    "type": "Conv2d",
+    "out": [
+     64,
+     55,
+     55
+    ],
+    "params": 23296,
+    "act": 193600,
+    "macs": 70276800,
+    "kernel": [
+     11,
+     11
+    ],
+    "stride": [
+     4,
+     4
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     64,
+     27,
+     27
+    ],
+    "params": 0,
+    "act": 46656,
+    "macs": 0,
+    "kernel": 3,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     192,
+     27,
+     27
+    ],
+    "params": 307392,
+    "act": 139968,
+    "macs": 223948800,
+    "kernel": [
+     5,
+     5
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     192,
+     13,
+     13
+    ],
+    "params": 0,
+    "act": 32448,
+    "macs": 0,
+    "kernel": 3,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     384,
+     13,
+     13
+    ],
+    "params": 663936,
+    "act": 64896,
+    "macs": 112140288,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     256,
+     13,
+     13
+    ],
+    "params": 884992,
+    "act": 43264,
+    "macs": 149520384,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     256,
+     13,
+     13
+    ],
+    "params": 590080,
+    "act": 43264,
+    "macs": 99680256,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     256,
+     6,
+     6
+    ],
+    "params": 0,
+    "act": 9216,
+    "macs": 0,
+    "kernel": 3,
+    "stride": 2
+   },
+   {
+    "type": "AdaptiveAvgPool2d",
+    "out": [
+     256,
+     6,
+     6
+    ],
+    "params": 0,
+    "act": 9216,
+    "macs": 0,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     4096
+    ],
+    "params": 37752832,
+    "act": 4096,
+    "macs": 37748736,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     4096
+    ],
+    "params": 16781312,
+    "act": 4096,
+    "macs": 16777216,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     1000
+    ],
+    "params": 4097000,
+    "act": 1000,
+    "macs": 4096000,
+    "kernel": null,
+    "stride": null
+   }
+  ]
+ },
+ "vgg16": {
+  "params": 138357544,
+  "macs": 15470264320,
+  "top1": 71.592,
+  "top5": 90.382,
+  "layers": [
+   {
+    "type": "Conv2d",
+    "out": [
+     64,
+     224,
+     224
+    ],
+    "params": 1792,
+    "act": 3211264,
+    "macs": 86704128,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     64,
+     224,
+     224
+    ],
+    "params": 36928,
+    "act": 3211264,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     64,
+     112,
+     112
+    ],
+    "params": 0,
+    "act": 802816,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     128,
+     112,
+     112
+    ],
+    "params": 73856,
+    "act": 1605632,
+    "macs": 924844032,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     128,
+     112,
+     112
+    ],
+    "params": 147584,
+    "act": 1605632,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     128,
+     56,
+     56
+    ],
+    "params": 0,
+    "act": 401408,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     256,
+     56,
+     56
+    ],
+    "params": 295168,
+    "act": 802816,
+    "macs": 924844032,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     256,
+     56,
+     56
+    ],
+    "params": 590080,
+    "act": 802816,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     256,
+     56,
+     56
+    ],
+    "params": 590080,
+    "act": 802816,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     256,
+     28,
+     28
+    ],
+    "params": 0,
+    "act": 200704,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     28,
+     28
+    ],
+    "params": 1180160,
+    "act": 401408,
+    "macs": 924844032,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     28,
+     28
+    ],
+    "params": 2359808,
+    "act": 401408,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     28,
+     28
+    ],
+    "params": 2359808,
+    "act": 401408,
+    "macs": 1849688064,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     512,
+     14,
+     14
+    ],
+    "params": 0,
+    "act": 100352,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     14,
+     14
+    ],
+    "params": 2359808,
+    "act": 100352,
+    "macs": 462422016,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     14,
+     14
+    ],
+    "params": 2359808,
+    "act": 100352,
+    "macs": 462422016,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "Conv2d",
+    "out": [
+     512,
+     14,
+     14
+    ],
+    "params": 2359808,
+    "act": 100352,
+    "macs": 462422016,
+    "kernel": [
+     3,
+     3
+    ],
+    "stride": [
+     1,
+     1
+    ]
+   },
+   {
+    "type": "MaxPool2d",
+    "out": [
+     512,
+     7,
+     7
+    ],
+    "params": 0,
+    "act": 25088,
+    "macs": 0,
+    "kernel": 2,
+    "stride": 2
+   },
+   {
+    "type": "AdaptiveAvgPool2d",
+    "out": [
+     512,
+     7,
+     7
+    ],
+    "params": 0,
+    "act": 25088,
+    "macs": 0,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     4096
+    ],
+    "params": 102764544,
+    "act": 4096,
+    "macs": 102760448,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     4096
+    ],
+    "params": 16781312,
+    "act": 4096,
+    "macs": 16777216,
+    "kernel": null,
+    "stride": null
+   },
+   {
+    "type": "Linear",
+    "out": [
+     1000
+    ],
+    "params": 4097000,
+    "act": 1000,
+    "macs": 4096000,
+    "kernel": null,
+    "stride": null
+   }
+  ]
+ },
+ "googlenet": {
+  "params": 6624904,
+  "macs": 1498376192,
+  "top1": 69.778,
+  "top5": 89.53,
+  "layers": null
+ },
+ "resnet18": {
+  "params": 11689512,
+  "macs": 1814073344,
+  "top1": 69.758,
+  "top5": 89.078,
+  "layers": null,
+  "stages": {
+   "stem": 9536,
+   "layer1": {
+    "blocks": 2,
+    "params": 147968
+   },
+   "layer2": {
+    "blocks": 2,
+    "params": 525568
+   },
+   "layer3": {
+    "blocks": 2,
+    "params": 2099712
+   },
+   "layer4": {
+    "blocks": 2,
+    "params": 8393728
+   },
+   "fc": 513000
+  }
+ },
+ "resnet50": {
+  "params": 25557032,
+  "macs": 4089184256,
+  "top1": 76.13,
+  "top5": 92.862,
+  "layers": null,
+  "stages": {
+   "stem": 9536,
+   "layer1": {
+    "blocks": 3,
+    "params": 215808
+   },
+   "layer2": {
+    "blocks": 4,
+    "params": 1219584
+   },
+   "layer3": {
+    "blocks": 6,
+    "params": 7098368
+   },
+   "layer4": {
+    "blocks": 3,
+    "params": 14964736
+   },
+   "fc": 2049000
+  }
+ },
+ "resnet152": {
+  "params": 60192808,
+  "macs": 11513626624,
+  "top1": 78.312,
+  "top5": 94.046,
+  "layers": null,
+  "stages": {
+   "stem": 9536,
+   "layer1": {
+    "blocks": 3,
+    "params": 215808
+   },
+   "layer2": {
+    "blocks": 8,
+    "params": 2339840
+   },
+   "layer3": {
+    "blocks": 36,
+    "params": 40613888
+   },
+   "layer4": {
+    "blocks": 3,
+    "params": 14964736
+   },
+   "fc": 2049000
+  }
+ },
+ "inception_example": {
+  "direct_5x5": 204800,
+  "reduce_1x1_then_5x5": 16896
+ }
+}

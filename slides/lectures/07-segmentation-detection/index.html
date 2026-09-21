@@ -1,0 +1,1520 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lecture 7: Segmentation and Detection</title>
+  <link rel="stylesheet" href="../../vendor/reveal/reset.css">
+  <link rel="stylesheet" href="../../vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="../../vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="../../shared/deck.css">
+  <script src="../../vendor/katex/katex.min.js"></script>
+  <script src="../../vendor/katex/contrib/auto-render.min.js"></script>
+  <script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js" } }</script>
+  <style>
+    .cap { font-size: 0.64em; color: var(--fg-dim); margin-top: 0.25em; line-height: 1.3; }
+    .tbl td, .tbl th { padding: 0.25em 0.7em; }
+    .tbl td.num, .tbl th.num { text-align: right; font-family: var(--mono); }
+    pre.code { font-family: var(--mono); font-size: 0.56em; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 0.6em 0.9em; margin: 0.4em 0; line-height: 1.45; white-space: pre; color: var(--fg); box-shadow: none; width: auto; }
+    pre.code .c { color: var(--fg-dim); }
+    .bigq { font-size: 1.1em; }
+    .reveal .widget { font-size: 0.78em; }
+    .reveal table { font-size: 0.8em; }
+    .task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em 1em; }
+    .task-grid .t { font-size: 0.66em; margin-top: 0.15em; }
+    .task-grid .t b { margin-right: 0.3em; }
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============================================================ -->
+<section class="title-slide">
+  <h1>Lecture 7<br>Segmentation and detection</h1>
+  <p class="subtitle">convnets that output images and boxes</p>
+  <p class="subtitle">Deep Neural Networks · University of Warsaw · 2026/27</p>
+  <p class="small interactive-only" style="margin-top:1.5em"><a href="../../pdf/07-segmentation-detection.pdf">PDF version</a> (light, for printing)</p>
+</section>
+
+<section>
+  <h2>Today in one sentence</h2>
+  <div class="box key" style="font-size:1.0em; margin-top:0.8em; padding:0.6em 1.1em">
+    A classifier says <b>what</b> is in the image. Today the network also says <b>where</b>:
+    a class for <b>every pixel</b> (segmentation) or a box for <b>every object</b> (detection).
+  </div>
+  <div class="task-grid" style="margin-top:0.8em; grid-template-columns: repeat(4, 1fr)">
+    <div><div data-widget="detview" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_sam.json","task":"classify","caption":"pear","width":270}'></div><div class="t"><b>classification</b>one label</div></div>
+    <div><div data-widget="detview" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_sam.json","task":"semantic","colors":{"pear":"#5fd38d","apple":"#ff6b6b"},"width":270}'></div><div class="t"><b>semantic segmentation</b>a class per pixel</div></div>
+    <div><div data-widget="detview" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_sam.json","task":"boxes","scores":false,"colors":{"pear":"#5fd38d","apple":"#ff6b6b"},"width":270,"tagSize":11}'></div><div class="t"><b>object detection</b>a box + class per object</div></div>
+    <div><div data-widget="detview" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_sam.json","task":"masks","width":270}'></div><div class="t"><b>instance segmentation</b>a mask per object</div></div>
+  </div>
+  <div class="cols c-3" style="margin-top:0.7em; font-size:0.92em">
+    <div class="box"><h3>1 · segmentation</h3><p class="small" style="font-size:0.88em">down and up again: transposed convolution, U-Net</p></div>
+    <div class="box"><h3>2 · detection</h3><p class="small" style="font-size:0.88em">a variable number of boxes: anchors, NMS, one or two stages</p></div>
+    <div class="box"><h3>3 · both, and beyond</h3><p class="small" style="font-size:0.88em">Mask R-CNN, Segment Anything</p></div>
+  </div>
+  <p class="credit">Photo: Tracy Lundgren, Pixabay licence. Masks: SAM, one click per fruit (part 3); class names added by us.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 1</div>
+  <h1>Semantic segmentation</h1>
+</section>
+
+<section>
+  <h2>A class for every pixel</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.2em">
+    <div data-widget="segview" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_seg.json","fine":"../../assets/lecture07/data/street_seg_fine.png","width":620,"show":"fine","buttons":false}'></div>
+    <div style="font-size:0.86em">
+      <ul>
+        <li>input $H \times W \times 3$, output $H \times W \times C$: class scores <b>for every pixel</b>, softmax over the $C$ classes</li>
+        <li>loss: cross-entropy, averaged over all pixels
+          $$L = -\frac{1}{HW}\sum_{i,j} \log p_{ij}(y_{ij})$$</li>
+        <li>classification of every pixel: all people are one region, the number of people is not part of the answer</li>
+        <li>labels are expensive: a polygon around every object</li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Our run: torchvision DeepLabV3-ResNet50 (21 Pascal VOC classes), <code>experiments/segmentation.py</code>. Photo: Unsplash, CC0 (Wikimedia Commons).</p>
+</section>
+
+<section>
+  <h2>Idea 1: classify a patch around every pixel</h2>
+  <div class="cols" style="grid-template-columns: 1.25fr 1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 640 300" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+      <image href="../../assets/lecture07/street.jpg" x="10" y="40" width="270" height="180"/>
+      <rect x="80" y="145" width="40" height="40" fill="none" stroke="#f2b134" stroke-width="2.5"/>
+      <rect x="98" y="163" width="4" height="4" fill="#f2b134"/>
+      <text x="145" y="30" fill="#9aa1ae" font-size="15" text-anchor="middle">a patch around each pixel</text>
+      <line x1="285" y1="132" x2="325" y2="132" stroke="#9aa1ae" stroke-width="1.8" marker-end="url(#a1)"/>
+      <polygon points="335,97 405,112 405,152 335,167" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+      <text x="370" y="137" fill="#e7e9ee" font-size="14" text-anchor="middle">CNN</text>
+      <line x1="410" y1="132" x2="445" y2="132" stroke="#9aa1ae" stroke-width="1.8" marker-end="url(#a1)"/>
+      <text x="455" y="92" fill="#f2b134" font-size="16" font-weight="600">person</text>
+      <rect x="558" y="80" width="72" height="14" fill="#f2b134"/>
+      <text x="455" y="122" fill="#e7e9ee" font-size="16">car</text>
+      <rect x="558" y="110" width="4" height="14" fill="#9aa1ae"/>
+      <text x="455" y="152" fill="#e7e9ee" font-size="16">bus</text>
+      <rect x="558" y="140" width="2" height="14" fill="#9aa1ae"/>
+      <text x="455" y="182" fill="#e7e9ee" font-size="16">background</text>
+      <rect x="558" y="170" width="3" height="14" fill="#9aa1ae"/>
+      <text x="320" y="275" fill="#e7e9ee" font-size="15" text-anchor="middle">the class of the centre pixel, one forward pass per pixel</text>
+    </svg>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>works (Ciresan et al., 2012, neuron membranes in microscopy images)</li>
+        <li>a 960×640 photo = <b>614,400</b> forward passes</li>
+        <li>neighbouring patches overlap almost completely: the same convolutions are computed again and again</li>
+      </ul>
+      <div class="takeaway">A convnet already computes its features <b>at all positions at once</b>. Keep the whole computation convolutional and read a prediction at every position.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Idea 2: only convolutions, at full resolution</h2>
+  <div style="display:grid; grid-template-columns: auto 1fr; gap:1em; align-items:center">
+    <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":3,"label":"H×W×3"},{"type":"op","text":"conv 3×3"},{"type":"vol","h":224,"w":224,"c":64,"label":"H×W×64"},{"type":"op","text":"conv 3×3"},{"type":"vol","h":224,"w":224,"c":64,"label":"H×W×64"},{"type":"text","text":"⋯"},{"type":"vol","h":224,"w":224,"c":64,"label":"H×W×64"},{"type":"op","text":"conv 1×1"},{"type":"vol","h":224,"w":224,"c":21,"label":"H×W×C","sub":"class scores","color":"#b28dff"}],"hs":13,"cs":3,"width":1180,"height":280}'></div>
+    <div style="font-size:0.6em; justify-self:end; opacity:0.9">
+      <div data-widget="receptive" data-config='{"layers":3,"k":3,"pool":false,"size":80,"mini":true}'></div>
+      <div class="cap" style="text-align:center">reminder (lecture 6): receptive field, 3 layers 3×3 → 7×7</div>
+    </div>
+  </div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.86em">
+    <div class="box"><h3>too expensive</h3>one 3×3 layer, 64 → 64 channels, on a 960×640 photo:
+      $$960\cdot 640\cdot 9\cdot 64\cdot 64 \approx 22.6\ \text{G multiply-adds}$$
+      more than the whole VGG-16 at 224×224 (15.5 G)</div>
+    <div class="box"><h3>sees too little</h3>each 3×3 layer adds 2 pixels to the receptive field: to see a whole 300-pixel bus, about <b>150 layers</b></div>
+  </div>
+</section>
+
+<section>
+  <h2>Idea 3: down, then up again</h2>
+  <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":3,"label":"224×224×3"},{"type":"op","text":"conv+pool"},{"type":"vol","h":112,"w":112,"c":64,"label":"112×112×64"},{"type":"op","text":"conv+pool"},{"type":"vol","h":56,"w":56,"c":128,"label":"56×56×128"},{"type":"op","text":"⋯"},{"type":"vol","h":14,"w":14,"c":512,"label":"14×14×512","sub":"small, deep","color":"#5ab0ff"},{"type":"op","text":"up","sub":"?","width":60},{"type":"vol","h":56,"w":56,"c":128,"label":"56×56×128","color":"#5fd38d"},{"type":"op","text":"up","sub":"?","width":60},{"type":"vol","h":112,"w":112,"c":64,"label":"112×112×64","color":"#5fd38d"},{"type":"op","text":"up","sub":"?","width":60},{"type":"vol","h":224,"w":224,"c":21,"label":"224×224×C","sub":"class scores","color":"#b28dff"}],"hs":9,"cs":2.2,"width":1180,"height":300}'></div>
+  <div class="cols c-2" style="gap:1.2em; font-size:0.88em; grid-template-columns: 1fr 1fr">
+    <div class="box"><h3 style="color:var(--blue)">encoder (downsampling)</h3>a classification network without its dense layers, usually <b>pretrained on ImageNet</b>: cheap, large receptive field, knows <b>what</b> is in the image</div>
+    <div class="box"><h3 style="color:var(--green)">decoder (upsampling)</h3>brings the resolution back to $H \times W$. But how do we make an image <b>larger</b>?</div>
+  </div>
+</section>
+
+<section>
+  <h2>Upsampling without parameters</h2>
+  <div data-widget="unpool" data-config='{"cell":38}'></div>
+  <ul style="font-size:0.86em; margin-top:0.6em">
+    <li>fixed rules, nothing to learn (bilinear interpolation is another one)</li>
+    <li>max unpooling needs the positions of the maxima from the matching max pooling layer of the encoder (SegNet, 2015)</li>
+    <li>next: let the network <b>learn</b> how to upsample</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Transposed convolution: learnable upsampling</h2>
+  <div data-widget="tconv" data-config='{"mode":"numbers","input":[[1,2],[3,1]],"kernel":[[1,2,1],[2,4,2],[1,2,1]],"stride":2,"step":1,"cell":46}'></div>
+  <div class="cols" style="grid-template-columns: 1.05fr 1fr; gap:1.2em; font-size:0.8em; margin-top:0.1em">
+    <div><p style="margin:0">Each input pixel adds a <b>copy of the kernel, scaled by its value</b>; copies are placed $s$ apart and <b>summed</b> where they overlap. The kernel is learned.</p></div>
+    <div>$$n_\text{out} = (n - 1)\,s + k - 2p$$
+<pre class="code">nn.ConvTranspose2d(64, 32, kernel_size=4,
+                   stride=2, padding=1)   <span class="c"># H×W → 2H×2W</span></pre></div>
+  </div>
+</section>
+
+<section>
+  <h2>Check yourself</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.05fr; gap:1.2em; align-items:start">
+    <div data-widget="slido" data-config='{"question":"A 3×3 transposed convolution with stride 2. Away from the border, how many input pixels does one output pixel depend on?","options":["always 1","always 4","always 9","it depends on the pixel"]}'></div>
+    <div data-widget="tconv" data-config='{"mode":"geometry","n":4,"k":3,"stride":2,"step":5,"size":330}'></div>
+  </div>
+</section>
+
+<section>
+  <h2>Two views of the same transposed convolution</h2>
+  <div style="display:grid; grid-template-columns: 250px 1fr; gap:0.4em 1em; align-items:center; font-size:0.8em">
+    <div><b>1. scatter</b> (as before): every <b>input</b> pixel adds a scaled copy of the kernel; overlaps are summed</div>
+    <div data-widget="tconv" data-config='{"mode":"numbers","input":[[1,2],[3,1]],"kernel":[[1,2,3],[4,5,6],[7,8,9]],"stride":2,"step":3,"cell":28,"mini":true}'></div>
+    <div><b>2. gather</b>: spread the input pixels apart with zeros, pad, then an <b>ordinary convolution</b> (stride 1): every <b>output</b> pixel is one window</div>
+    <div data-widget="tconv" data-config='{"mode":"dilated","input":[[1,2],[3,1]],"kernel":[[1,2,3],[4,5,6],[7,8,9]],"stride":2,"step":7,"cell":28}'></div>
+  </div>
+</section>
+
+<section>
+  <h2>Why “transposed”?</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.4em; align-items:start; font-size:0.86em">
+    <div>
+      <p class="small" style="margin:0">a convolution, 1D, $k = 3$, stride 2: $\mathbb{R}^5 \to \mathbb{R}^2$ (lecture 6: a dense layer with a special matrix)</p>
+      $$\begin{bmatrix} y_1\\ y_2 \end{bmatrix} = \underbrace{\begin{bmatrix}
+        \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3} & 0 & 0\\
+        0 & 0 & \color{#ff6b6b}{w_1} & \color{#5fd38d}{w_2} & \color{#5ab0ff}{w_3}
+      \end{bmatrix}}_{M} \begin{bmatrix} x_1\\ x_2\\ x_3\\ x_4\\ x_5 \end{bmatrix}$$
+    </div>
+    <div>
+      <p class="small" style="margin:0">the transposed convolution: the same weights, $M^\top$, $\mathbb{R}^2 \to \mathbb{R}^5$</p>
+      $$\begin{bmatrix} z_1\\ z_2\\ z_3\\ z_4\\ z_5 \end{bmatrix} = \begin{bmatrix}
+        \color{#ff6b6b}{w_1} & 0\\ \color{#5fd38d}{w_2} & 0\\ \color{#5ab0ff}{w_3} & \color{#ff6b6b}{w_1}\\ 0 & \color{#5fd38d}{w_2}\\ 0 & \color{#5ab0ff}{w_3}
+      \end{bmatrix} \begin{bmatrix} y_1\\ y_2 \end{bmatrix}$$
+    </div>
+  </div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.0em; font-size:0.8em">
+    <div class="box"><h3>read $M^\top$ by columns: scatter (view 1)</h3>
+      $$\mathbf{z} = y_1 \begin{bmatrix} \color{#ff6b6b}{w_1}\\ \color{#5fd38d}{w_2}\\ \color{#5ab0ff}{w_3}\\ 0\\ 0 \end{bmatrix} + y_2 \begin{bmatrix} 0\\ 0\\ \color{#ff6b6b}{w_1}\\ \color{#5fd38d}{w_2}\\ \color{#5ab0ff}{w_3} \end{bmatrix}$$
+      each input adds a copy of the kernel, scaled by its value and shifted by the stride; $z_3$ gets two copies</div>
+    <div class="box"><h3>read $M^\top$ by rows: gather (view 2)</h3>
+      $$z_3 = \color{#5ab0ff}{w_3}\,y_1 + \color{#5fd38d}{w_2}\cdot 0 + \color{#ff6b6b}{w_1}\,y_2$$
+      every output is one window of $(0,\, 0,\, y_1,\, 0,\, y_2,\, 0,\, 0)$, $\mathbf{y}$ spread with zeros and padded, times the kernel <b>read backwards</b> $(\color{#5ab0ff}{w_3}, \color{#5fd38d}{w_2}, \color{#ff6b6b}{w_1})$: in 2D, rotated by 180°</div>
+  </div>
+  <p style="font-size:0.78em; margin-top:0.4em">$M^\top$ is also the <b>backward pass</b> of the strided convolution ($\partial L / \partial \mathbf{x} = M^\top\, \partial L / \partial \mathbf{y}$), and frameworks implement one with the other. It restores the <b>shape</b>, not the values: $M^\top$ is not $M^{-1}$, so “deconvolution” is a misleading name.</p>
+</section>
+
+<section>
+  <h2>Uneven overlap: checkerboard artifacts</h2>
+  <div class="cols" style="grid-template-columns: 1.05fr 1fr; gap:1.2em; align-items:start">
+    <div data-widget="tconv" data-config='{"mode":"overlap","n":5,"k":3,"stride":2,"cell":30}'></div>
+    <div style="font-size:0.84em">
+      <p style="margin-top:0">Answer to the question: <b>it depends on the pixel</b>. In both views, and in the rows of $M^\top$, an output pixel gets 1, 2 or 4 inputs. With an input of ones and a kernel of ones the output counts them: a regular pattern.</p>
+      <ul>
+        <li>generated images and segmentation maps show a faint <b>checkerboard</b> (Odena, Dumoulin &amp; Olah, 2016)</li>
+        <li>fix 1: kernel size divisible by the stride ($k = 4$, $s = 2$): even overlap away from the border</li>
+        <li>fix 2: <b>resize, then convolve</b>: nearest-neighbour or bilinear upsampling, then a normal 3×3 convolution</li>
+      </ul>
+      <p class="small">Try the buttons: $k$, $s$, and “resize + conv”.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Checkerboards in real networks</h2>
+  <div class="cols" style="grid-template-columns: auto auto; gap:0.6em 1.6em; align-items:start; justify-content:start; font-size:0.8em">
+    <div><p style="margin:0 0 0.2em"><b>untrained</b> generator (random weights)</p>
+      <div style="display:flex; gap:0.6em"><div><img src="../../assets/lecture07/distill/im_rand_two_0.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">deconv in the<br>last 2 layers</div></div><div><img src="../../assets/lecture07/distill/im_rand_one_0.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">deconv in the<br>last layer</div></div><div><img src="../../assets/lecture07/distill/im_rand_zero_1.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">resize + conv<br>everywhere</div></div></div></div>
+    <div><p style="margin:0 0 0.2em"><b>trained</b> GAN, the same three variants</p>
+      <div style="display:flex; gap:0.6em"><div><img src="../../assets/lecture07/distill/fix_two_deconv_bird.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">last 2 layers</div></div><div><img src="../../assets/lecture07/distill/fix_one_deconv_bird.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">last layer</div></div><div><img src="../../assets/lecture07/distill/fix_zero_deconv_bird.png" style="width:120px; height:auto; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">none</div></div></div></div>
+  </div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; margin-top:0.5em; font-size:0.8em">
+    <div><img src="../../assets/lecture07/distill/style_artifacts.png" style="width:100%; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">style transfer with transposed convolutions</div></div>
+    <div><img src="../../assets/lecture07/distill/style_clean.png" style="width:100%; image-rendering:pixelated; margin:0; border-radius:4px"><div class="small" style="text-align:center; line-height:1.2">the same network with resize + conv</div></div>
+  </div>
+  <div class="takeaway" style="font-size:0.82em; margin-top:0.4em">The pattern is there <b>before any training</b>: it comes from the architecture (uneven overlap), not from the data. Training rarely removes it fully; resize + conv avoids it.</div>
+  <p class="credit">Figures: Odena, Dumoulin &amp; Olah, “Deconvolution and Checkerboard Artifacts”, Distill 2016, CC BY 2.0.</p>
+</section>
+
+<section class="section-slide">
+  <div class="num">Part 1, continued</div>
+  <h1>Two architectures: FCN and U&#8209;Net</h1>
+  <p style="color:var(--fg-dim); margin:0.4em 0 0">built from the pieces we already have:</p>
+  <div class="cols" style="grid-template-columns: repeat(4, 1fr); gap:0.7em; font-size:0.7em; margin-top:0.4em">
+    <div class="box"><svg viewBox="0 0 160 70" style="width:100%; height:70px; display:block"><defs><marker id="pcA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="15" y="10" width="50" height="50" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><line x1="72" y1="35" x2="92" y2="35" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#pcA)"/><rect x="98" y="10" width="50" height="50" fill="#b28dff" fill-opacity="0.3" stroke="#b28dff"/><text x="123" y="40" fill="#e7e9ee" font-size="12" text-anchor="middle">C</text></svg><b>fully convolutional</b>: any input size; a 1×1 conv gives C class scores at every position</div>
+    <div class="box"><svg viewBox="0 0 160 70" style="width:100%; height:70px; display:block"><defs><marker id="pcA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="15" y="5" width="60" height="60" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><line x1="82" y1="35" x2="102" y2="35" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#pcA)"/><rect x="110" y="20" width="30" height="30" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/></svg><b>down</b>: pooling or stride: cheap, large receptive field, but coarse</div>
+    <div class="box"><svg viewBox="0 0 160 70" style="width:100%; height:70px; display:block"><defs><marker id="pcA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="15" y="20" width="30" height="30" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><line x1="52" y1="35" x2="72" y2="35" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#pcA)"/><rect x="85" y="5" width="60" height="60" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/></svg><b>up</b>: interpolation, unpooling, or a learned transposed convolution</div>
+    <div class="box"><svg viewBox="0 0 160 70" style="width:100%; height:70px; display:block"><defs><marker id="pcA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="15" y="25" width="22" height="40" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><rect x="69" y="35" width="22" height="30" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><rect x="123" y="25" width="22" height="40" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><path d="M26,22 C26,2 134,2 134,20" fill="none" stroke="#f2b134" stroke-width="2" marker-end="url(#pcA)"/></svg><b>skip connections</b> (lecture 6): bring the fine detail of early layers to the end</div>
+  </div>
+</section>
+
+<section>
+  <h2>FCN (Long et al., 2015): predict small, upsample</h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:start">
+    <div data-widget="segview" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_seg.json","fine":"../../assets/lecture07/data/street_seg_fine.png","mid":"../../assets/lecture07/data/street_seg_mid.png","coarse":"../../assets/lecture07/data/street_seg_coarse.png","width":560,"show":"coarse","views":["photo","coarse"]}'></div>
+    <div>
+      <svg viewBox="0 0 560 305" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+        <defs><marker id="fcnA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+        <rect x="10" y="20.0" width="10" height="120" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="15.0" y="14" fill="#e7e9ee" font-size="13" text-anchor="middle">input</text>
+        <line x1="24" y1="80" x2="71" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="75" y="32.0" width="14" height="96" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="82.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/2</text>
+        <line x1="93" y1="80" x2="136" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="140" y="43.0" width="18" height="74" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="149.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/4</text>
+        <line x1="162" y1="80" x2="206" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="210" y="52.0" width="22" height="56" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="221.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/8</text>
+        <line x1="236" y1="80" x2="286" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="290" y="59.0" width="26" height="42" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="303.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/16</text>
+        <line x1="320" y1="80" x2="376" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="380" y="65.0" width="40" height="30" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="400.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/32</text>
+        <text x="424" y="109.0" fill="#9aa1ae" font-size="11">conv7</text>
+        <line x1="400.0" y1="98.0" x2="400.0" y2="216" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="395.0" y="219" width="10" height="22" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <line x1="392.0" y1="230" x2="70" y2="230" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <text x="231" y="223" fill="#f2b134" font-size="13" font-weight="600" text-anchor="middle">×32 (transposed conv)</text>
+        <rect x="40" y="175" width="26" height="110" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <text x="53" y="302" fill="#e7e9ee" font-size="12" text-anchor="middle">H×W×C</text>
+        <text x="400.0" y="258" fill="#e7e9ee" font-size="12" font-weight="600" text-anchor="middle">FCN-32s</text>
+        <rect x="300" y="292" width="9" height="9" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <text x="314" y="301" fill="#9aa1ae" font-size="11">class scores (1×1 conv, C channels)</text>
+      </svg>
+      <ul style="font-size:0.8em; margin-top:0.4em">
+        <li><b>fully convolutional</b>: VGG-16 with the dense layers turned into convolutions; any input size</li>
+        <li>class scores at <b>1/32</b>, one upsampling ×32: blobs</li>
+        <li>the deepest layer knows <b>what</b>, but not exactly <b>where</b></li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Left: our DeepLabV3 run, its logits average-pooled to 1/32 and upsampled bilinearly, as an FCN-32s would see it (<code>experiments/segmentation.py</code>).</p>
+</section>
+
+<section>
+  <h2>FCN-32s, 16s, 8s: add the finer layers</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr 1fr; gap:0.8em; align-items:start; font-size:0.82em">
+    <div><b>FCN-32s</b>: only conv7, ×32<div data-widget="segview" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_seg.json","fine":"../../assets/lecture07/data/street_seg_fine.png","mid":"../../assets/lecture07/data/street_seg_mid.png","coarse":"../../assets/lecture07/data/street_seg_coarse.png","width":380,"show":"coarse","buttons":false,"legend":false}'></div></div>
+    <div><b>FCN-16s</b>: + pool4, ×16<div data-widget="segview" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_seg.json","fine":"../../assets/lecture07/data/street_seg_fine.png","mid":"../../assets/lecture07/data/street_seg_mid.png","coarse":"../../assets/lecture07/data/street_seg_coarse.png","width":380,"show":"mid","buttons":false,"legend":false}'></div></div>
+    <div><b>FCN-8s</b>: + pool3, ×8<div data-widget="segview" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_seg.json","fine":"../../assets/lecture07/data/street_seg_fine.png","mid":"../../assets/lecture07/data/street_seg_mid.png","coarse":"../../assets/lecture07/data/street_seg_coarse.png","width":380,"show":"fine","buttons":false,"legend":false}'></div></div>
+  </div>
+  <div class="cols" style="grid-template-columns: 470px 1fr; gap:1.4em; align-items:start; margin-top:0.3em">
+    <div>
+      <svg viewBox="0 0 560 305" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+        <defs><marker id="fcnA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+        <rect x="10" y="20.0" width="10" height="120" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="15.0" y="14" fill="#e7e9ee" font-size="13" text-anchor="middle">input</text>
+        <line x1="24" y1="80" x2="71" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="75" y="32.0" width="14" height="96" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="82.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/2</text>
+        <line x1="93" y1="80" x2="136" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="140" y="43.0" width="18" height="74" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="149.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/4</text>
+        <line x1="162" y1="80" x2="206" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="210" y="52.0" width="22" height="56" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="221.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/8</text>
+        <line x1="236" y1="80" x2="286" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="290" y="59.0" width="26" height="42" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="303.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/16</text>
+        <line x1="320" y1="80" x2="376" y2="80" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="380" y="65.0" width="40" height="30" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/>
+        <text x="400.0" y="14" fill="#9aa1ae" font-size="13" text-anchor="middle">1/32</text>
+        <text x="236" y="122.0" fill="#9aa1ae" font-size="11">pool3</text>
+        <text x="320" y="115.0" fill="#9aa1ae" font-size="11">pool4</text>
+        <text x="424" y="109.0" fill="#9aa1ae" font-size="11">conv7</text>
+        <line x1="221.0" y1="111.0" x2="221.0" y2="137.0" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="216.0" y="140.0" width="10" height="40" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <line x1="221.0" y1="183.0" x2="221.0" y2="215" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <circle cx="221.0" cy="230" r="11" fill="none" stroke="#e7e9ee" stroke-width="1.5"/><text x="221.0" y="235" fill="#e7e9ee" font-size="16" text-anchor="middle">+</text>
+        <line x1="303.0" y1="104.0" x2="303.0" y2="142.0" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="298.0" y="145.0" width="10" height="30" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <line x1="303.0" y1="178.0" x2="303.0" y2="215" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <circle cx="303.0" cy="230" r="11" fill="none" stroke="#e7e9ee" stroke-width="1.5"/><text x="303.0" y="235" fill="#e7e9ee" font-size="16" text-anchor="middle">+</text>
+        <line x1="400.0" y1="98.0" x2="400.0" y2="216" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <rect x="395.0" y="219" width="10" height="22" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <line x1="392.0" y1="230" x2="317.0" y2="230" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <text x="354.5" y="223" fill="#f2b134" font-size="13" font-weight="600" text-anchor="middle">×2</text>
+        <line x1="289.0" y1="230" x2="235.0" y2="230" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <text x="262.0" y="223" fill="#f2b134" font-size="13" font-weight="600" text-anchor="middle">×2</text>
+        <line x1="207.0" y1="230" x2="70" y2="230" stroke="#9aa1ae" stroke-width="1.5" marker-end="url(#fcnA)"/>
+        <text x="138.5" y="223" fill="#f2b134" font-size="13" font-weight="600" text-anchor="middle">×8</text>
+        <rect x="40" y="175" width="26" height="110" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <text x="53" y="302" fill="#e7e9ee" font-size="12" text-anchor="middle">H×W×C</text>
+        <text x="221.0" y="258" fill="#e7e9ee" font-size="12" font-weight="600" text-anchor="middle">FCN-8s</text>
+        <text x="303.0" y="258" fill="#e7e9ee" font-size="12" font-weight="600" text-anchor="middle">FCN-16s</text>
+        <text x="400.0" y="258" fill="#e7e9ee" font-size="12" font-weight="600" text-anchor="middle">FCN-32s:</text>
+        <text x="400.0" y="273" fill="#9aa1ae" font-size="11" text-anchor="middle">×32 from here</text>
+        <rect x="300" y="292" width="9" height="9" fill="#b28dff" fill-opacity="0.35" stroke="#b28dff"/>
+        <text x="314" y="301" fill="#9aa1ae" font-size="11">class scores (1×1 conv, C channels)</text>
+      </svg>
+    </div>
+    <ul style="font-size:0.8em; margin-top:0.2em">
+      <li>add the class scores computed from earlier, finer layers (⊕), then upsample less</li>
+      <li>the deep layers know <b>what</b>, the shallow layers know <b>where</b>: combine both</li>
+      <li>FCN-8s: the person, the car and the bus get their outlines back</li>
+    </ul>
+  </div>
+  <p class="credit">Panels: our DeepLabV3 logits at 1/32, 1/16 and 1/8 of the input, upsampled bilinearly: an illustration of the output resolution of the three FCNs, not the FCN models themselves (<code>experiments/segmentation.py</code>).</p>
+</section>
+
+<section>
+  <h2>U-Net (Ronneberger, Fischer &amp; Brox, 2015)</h2>
+  <div class="cols" style="grid-template-columns: 1.6fr 1fr; gap:0.6em; align-items:start">
+    <div>
+      <div data-widget="unet" data-config='{"width":760,"highlight":2,"legendSize":19}'></div>
+      <div class="cols c-3" style="font-size:0.66em; gap:0.5em; margin-top:0.3em">
+        <div class="box">encoder: two 3×3 convs, then 2×2 max pool: half the size, double the channels</div>
+        <div class="box">decoder: transposed conv ×2, <b>concatenate</b> the encoder map of the same size, two 3×3 convs</div>
+        <div class="box">skip connections at <b>every</b> level bring back the detail lost by pooling</div>
+      </div>
+    </div>
+    <div>
+      <svg viewBox="0 0 450 420" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><defs><marker id="uz5ab0ff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5ab0ff"/></marker><marker id="uz5fd38d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5fd38d"/></marker><marker id="uzf2b134" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f2b134"/></marker><marker id="uz9aa1ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+      <text x="405" y="26" fill="#9aa1ae" font-size="13" text-anchor="middle">↑ next level</text>
+      <rect x="390" y="38" width="30" height="96" fill="#5fd38d" fill-opacity="0.3" stroke="#5fd38d" stroke-width="1.5"/>
+      <text x="405" y="152" fill="#e7e9ee" font-size="13" text-anchor="middle">64×64×256</text>
+      <rect x="60" y="38" width="30" height="96" fill="#5ab0ff" fill-opacity="0.3" stroke="#5ab0ff" stroke-width="1.5"/>
+      <rect x="90" y="38" width="30" height="96" fill="#5fd38d" fill-opacity="0.3" stroke="#5fd38d" stroke-width="1.5"/>
+      <rect x="56" y="78" width="68" height="16" fill="none" stroke="#f2b134" stroke-width="2.5" rx="2"/>
+      <text x="134" y="54" fill="#e7e9ee" font-size="15" text-anchor="start" font-weight="700">64×64×512</text>
+      <text x="134" y="73" fill="#f2b134" font-size="13" text-anchor="start">concatenate = stack the channels</text>
+      <text x="134" y="90" fill="#9aa1ae" font-size="13" text-anchor="start">each pixel: 256 + 256 numbers</text>
+      <text x="134" y="112" fill="#9aa1ae" font-size="13" text-anchor="start">conv 3×3 + ReLU, twice</text>
+      <line x1="126" y1="120" x2="384" y2="120" stroke="#9aa1ae" stroke-width="2" marker-end="url(#uz9aa1ae)"/>
+      <text x="56" y="26" fill="#9aa1ae" font-size="13" text-anchor="start"><tspan fill="#f2b134">▭</tspan> one 3×3 filter: all 512 channels</text>
+      <line x1="75" y1="188" x2="75" y2="138" stroke="#5ab0ff" stroke-width="2" marker-end="url(#uz5ab0ff)"/>
+      <line x1="255" y1="188" x2="110" y2="138" stroke="#5fd38d" stroke-width="2" marker-end="url(#uz5fd38d)"/>
+      <rect x="60" y="192" width="30" height="96" fill="#5ab0ff" fill-opacity="0.3" stroke="#5ab0ff" stroke-width="1.5"/>
+      <text x="75" y="306" fill="#e7e9ee" font-size="14" text-anchor="middle">64×64×256</text>
+      <text x="75" y="322" fill="#9aa1ae" font-size="13" text-anchor="middle">encoder copy</text>
+      <line x1="2" y1="240" x2="56" y2="240" stroke="#f2b134" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#uzf2b134)"/>
+      <text x="4" y="230" fill="#f2b134" font-size="13" text-anchor="start">copy</text>
+      <text x="100" y="236" fill="#9aa1ae" font-size="13" text-anchor="start"><tspan font-weight="700" fill="#5ab0ff">where</tspan>:</text>
+      <text x="100" y="252" fill="#9aa1ae" font-size="13" text-anchor="start">fine detail</text>
+      <rect x="245" y="192" width="30" height="96" fill="#5fd38d" fill-opacity="0.3" stroke="#5fd38d" stroke-width="1.5"/>
+      <text x="285" y="222" fill="#e7e9ee" font-size="14" text-anchor="start">64×64×256</text>
+      <text x="285" y="240" fill="#9aa1ae" font-size="13" text-anchor="start">upsampled:</text>
+      <text x="285" y="256" fill="#9aa1ae" font-size="13" text-anchor="start"><tspan font-weight="700" fill="#5fd38d">what</tspan> is there,</text>
+      <text x="285" y="272" fill="#9aa1ae" font-size="13" text-anchor="start">but coarse</text>
+      <line x1="260" y1="328" x2="260" y2="292" stroke="#5fd38d" stroke-width="2" marker-end="url(#uz5fd38d)"/>
+      <text x="272" y="316" fill="#5fd38d" font-size="13" text-anchor="start">up-conv 2×2, stride 2</text>
+      <rect x="230" y="332" width="60" height="48" fill="#5fd38d" fill-opacity="0.3" stroke="#5fd38d" stroke-width="1.5"/>
+      <text x="260" y="400" fill="#9aa1ae" font-size="13" text-anchor="middle">32×32×512 (decoder, below)</text>
+      </svg>
+      <p class="small" style="margin:0.1em 0 0; font-size:0.62em">U-Net keeps both feature maps (256 channels each) and the next convolutions learn how to combine them. FCN (the ⊕ on the previous slide) merges later and more simply: it <b>adds</b> two maps of C class scores, pixel by pixel.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>U-Net: the default starting point</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.88em">
+    <div>
+      <ul>
+        <li><b>origin</b>: biomedical microscopy (segmenting cells), with only 30 annotated images and heavy augmentation (elastic deformations); today used for almost any segmentation task (right)</li>
+        <li>concatenation (not addition, as in FCN): the decoder sees the fine encoder features and its own coarse ones, and learns how to combine them</li>
+        <li>use a pretrained classification network as the encoder (ResNet, ConvNeXt): the usual first try for any segmentation task</li>
+      </ul>
+    </div>
+    <div class="box key">
+      <h3>everywhere an image goes in and an image of the same size comes out</h3>
+      <ul style="font-size:0.95em">
+        <li>medical images: organs, tumours</li>
+        <li>satellite images: buildings, roads, fields</li>
+        <li>the denoising network of diffusion and flow-matching models (lecture 5): noisy image in, noise or velocity out, same size</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Dilated (atrous) convolution: large receptive field, no downsampling</h2>
+  <svg viewBox="0 0 1060 300" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><text x="70" y="20" fill="#f2b134" font-size="17" font-weight="600">3 layers, 3×3, dilation 1</text>
+<line x1="226" y1="164" x2="200" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="226" y1="164" x2="226" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="226" y1="164" x2="252" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="164" x2="226" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="164" x2="252" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="164" x2="278" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="164" x2="252" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="164" x2="278" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="164" x2="304" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="164" x2="278" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="164" x2="304" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="164" x2="330" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="330" y1="164" x2="304" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="330" y1="164" x2="330" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="330" y1="164" x2="356" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="102" x2="226" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="102" x2="252" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="252" y1="102" x2="278" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="102" x2="252" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="102" x2="278" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="102" x2="304" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="102" x2="278" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="102" x2="304" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="304" y1="102" x2="330" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="40" x2="252" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="40" x2="278" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="278" y1="40" x2="304" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<circle cx="70" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="96" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="122" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="148" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="174" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="200" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="226" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="252" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="278" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="304" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="330" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="356" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="382" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="408" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="434" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="460" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="486" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="54" y="231" fill="#9aa1ae" font-size="14" text-anchor="end">input</text>
+<circle cx="70" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="96" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="122" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="148" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="174" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="200" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="226" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="252" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="278" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="304" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="330" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="356" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="382" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="408" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="434" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="460" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="486" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="54" y="169" fill="#9aa1ae" font-size="14" text-anchor="end">d = 1</text>
+<circle cx="70" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="96" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="122" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="148" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="174" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="200" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="226" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="252" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="278" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="304" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="330" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="356" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="382" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="408" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="434" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="460" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="486" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="54" y="107" fill="#9aa1ae" font-size="14" text-anchor="end">d = 1</text>
+<circle cx="70" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="96" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="122" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="148" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="174" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="200" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="226" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="252" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="278" cy="40" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="304" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="330" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="356" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="382" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="408" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="434" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="460" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="486" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="54" y="45" fill="#9aa1ae" font-size="14" text-anchor="end">d = 1</text>
+<text x="278" y="262" fill="#e7e9ee" font-size="16" text-anchor="middle">one output sees 7 inputs</text><text x="600" y="20" fill="#f2b134" font-size="17" font-weight="600">3 layers, 3×3, dilation 1, 2, 4</text>
+<line x1="652" y1="164" x2="626" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="652" y1="164" x2="652" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="652" y1="164" x2="678" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="164" x2="678" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="164" x2="704" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="164" x2="730" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="756" y1="164" x2="730" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="756" y1="164" x2="756" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="756" y1="164" x2="782" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="164" x2="782" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="164" x2="808" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="164" x2="834" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="860" y1="164" x2="834" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="860" y1="164" x2="860" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="860" y1="164" x2="886" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="164" x2="886" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="164" x2="912" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="164" x2="938" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="964" y1="164" x2="938" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="964" y1="164" x2="964" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="964" y1="164" x2="990" y2="226" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="102" x2="652" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="102" x2="704" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="704" y1="102" x2="756" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="102" x2="756" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="102" x2="808" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="102" x2="860" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="102" x2="860" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="102" x2="912" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="912" y1="102" x2="964" y2="164" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="40" x2="704" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="40" x2="808" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<line x1="808" y1="40" x2="912" y2="102" stroke="#f2b134" stroke-width="1.6" opacity="0.8"/>
+<circle cx="600" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="626" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="652" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="678" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="704" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="730" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="756" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="782" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="808" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="834" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="860" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="886" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="912" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="938" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="964" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="990" cy="226" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="1016" cy="226" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="584" y="231" fill="#9aa1ae" font-size="14" text-anchor="end">input</text>
+<circle cx="600" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="626" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="652" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="678" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="704" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="730" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="756" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="782" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="808" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="834" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="860" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="886" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="912" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="938" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="964" cy="164" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="990" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="1016" cy="164" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="584" y="169" fill="#9aa1ae" font-size="14" text-anchor="end">d = 1</text>
+<circle cx="600" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="626" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="652" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="678" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="704" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="730" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="756" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="782" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="808" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="834" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="860" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="886" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="912" cy="102" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="938" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="964" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="990" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="1016" cy="102" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="584" y="107" fill="#9aa1ae" font-size="14" text-anchor="end">d = 2</text>
+<circle cx="600" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="626" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="652" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="678" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="704" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="730" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="756" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="782" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="808" cy="40" r="7.5" fill="#f2b134" stroke="#5a606c" stroke-width="1"/>
+<circle cx="834" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="860" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="886" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="912" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="938" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="964" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="990" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<circle cx="1016" cy="40" r="7.5" fill="#272b34" stroke="#5a606c" stroke-width="1"/>
+<text x="584" y="45" fill="#9aa1ae" font-size="14" text-anchor="end">d = 4</text>
+<text x="808" y="262" fill="#e7e9ee" font-size="16" text-anchor="middle">one output sees 15 inputs</text></svg>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.84em; margin-top:0.3em">
+    <ul>
+      <li>a 3×3 kernel with gaps: dilation $d$ reads pixels $d$ apart; still 9 weights</li>
+      <li>dilations 1, 2, 4, 8, … : the receptive field grows <b>exponentially</b> with depth, the resolution stays</li>
+    </ul>
+    <ul>
+      <li>DeepLab (Chen et al., 2017): ResNet whose last stages are dilated instead of strided, output at 1/8 instead of 1/32</li>
+      <li>the DeepLabV3 of our segmentation slides: the last two ResNet stages use dilation 2 and 4 instead of stride 2</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Loss and metric</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.86em">
+    <div>
+      <h3>classes are unbalanced</h3>
+      <table class="tbl">
+        <tr><th>class (our street photo)</th><th class="num">pixels</th></tr>
+        <tr><td>background</td><td class="num">75.2%</td></tr>
+        <tr><td>person</td><td class="num">13.0%</td></tr>
+        <tr><td>bus</td><td class="num">7.1%</td></tr>
+        <tr><td>car</td><td class="num">4.7%</td></tr>
+      </table>
+      <p>Cross-entropy is dominated by the large classes → class weights, or the <b>Dice loss</b> (per class):</p>
+      $$L_\text{Dice} = 1 - \frac{2 \sum_i p_i\, g_i}{\sum_i p_i + \sum_i g_i}$$
+      <p class="small" style="margin-top:0">$p_i$: predicted probability of the class at pixel $i$, $g_i \in \{0, 1\}$: the label. Probabilities, not 0/1: a smooth function of the weights, so a <b>loss</b>.</p>
+    </div>
+    <div>
+      <h3>intersection over union (IoU)</h3>
+      <svg viewBox="0 0 420 160" style="width:55%; display:block; margin:0.2em auto 0">
+        <circle cx="160" cy="80" r="62" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d" stroke-width="2.5"/>
+        <circle cx="240" cy="80" r="62" fill="#f2b134" fill-opacity="0.25" stroke="#f2b134" stroke-width="2.5"/>
+        <text x="110" y="85" fill="#5fd38d" font-size="17" font-weight="600" text-anchor="middle">G</text>
+        <text x="292" y="85" fill="#f2b134" font-size="17" font-weight="600" text-anchor="middle">P</text>
+        <text x="200" y="85" fill="#e7e9ee" font-size="15" text-anchor="middle">P∩G</text>
+      </svg>
+      $$\mathrm{IoU} = \frac{|P \cap G|}{|P \cup G|}$$
+      <ul>
+        <li>$P$: pixels predicted as the class, $G$: labelled as it</li>
+        <li><b>mean IoU</b> over classes: the standard metric</li>
+        <li>for boxes: what counts as a hit in detection (next part)</li>
+      </ul>
+      <div class="box key" style="font-size:0.88em; margin-top:0.3em"><b>differentiable?</b> No: $P$ comes from argmax, a step. A small weight change flips no pixel: gradient 0 almost everywhere. IoU is a <b>metric</b>; train on cross-entropy or soft Dice.</div>
+    </div>
+  </div>
+  <p class="credit">Pixel shares: our DeepLabV3 prediction on the street photo, <code>experiments/segmentation.py</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 2</div>
+  <h1>Object detection</h1>
+</section>
+
+<section>
+  <h2>Detection: a list of boxes</h2>
+  <div data-widget="detview" data-config='{"src":"../../assets/lecture07/crowd.jpg","data":"../../assets/lecture07/data/crowd_raw.json","task":"boxes","minScore":0.7,"nms":0.5,"only":["person","umbrella"],"colors":{"person":"#f2b134","umbrella":"#5ab0ff"},"width":900,"tagSize":10}'></div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.84em; margin-top:0.3em">
+    <ul>
+      <li>output: a list of (class, score, box); box = 4 numbers, axis-aligned</li>
+      <li>the <b>number of objects is not known</b> in advance: 0, 1 or 50</li>
+    </ul>
+    <ul>
+      <li>COCO: 80 classes, 118 k training images, 860 k labelled boxes</li>
+      <li>here: Faster R-CNN, people and umbrellas, score ≥ 0.7</li>
+    </ul>
+  </div>
+  <p class="credit">Our run: torchvision Faster R-CNN v2, <code>experiments/detection.py</code>. Photo: Unsplash, CC0 (Wikimedia Commons), cropped.</p>
+</section>
+
+<section>
+  <h2>When is a box correct? Intersection over union</h2>
+  <div class="cols" style="grid-template-columns: 1.5fr 1fr; gap:1.2em; align-items:center">
+    <div data-widget="iou" data-config='{}'></div>
+    <div style="font-size:0.86em">
+      <ul>
+        <li>drag the prediction, resize it at the corner</li>
+        <li>a detection counts as correct when it has the right class and <b>IoU ≥ 0.5</b> with a true box (Pascal VOC)</li>
+        <li>COCO is stricter: the score is averaged over thresholds 0.5, 0.55, …, 0.95</li>
+        <li>IoU 0.5 looks generous: a box shifted by a third of its width still passes</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>One object: classification + regression</h2>
+  <svg viewBox="0 25 1180 270" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+    <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+    <image href="../../assets/lecture07/apple.jpg" x="20" y="45" width="330" height="219"/>
+    <rect x="128" y="103" width="114" height="117" fill="none" stroke="#f2b134" stroke-width="3"/>
+    <text x="128" y="96" fill="#f2b134" font-size="15" font-weight="600">x, y, w, h</text>
+    <line x1="360" y1="155" x2="410" y2="155" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a2)"/>
+    <polygon points="420,95 540,125 540,185 420,215" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff" stroke-width="1.5"/>
+    <text x="478" y="160" fill="#e7e9ee" font-size="17" text-anchor="middle">CNN</text>
+    <line x1="545" y1="140" x2="610" y2="85" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a2)"/>
+    <line x1="545" y1="170" x2="610" y2="235" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a2)"/>
+    <rect x="615" y="35" width="250" height="100" rx="8" fill="#1e2128" stroke="#3a3f4b"/>
+    <text x="630" y="60" fill="#5ab0ff" font-size="16" font-weight="600">class scores (softmax)</text>
+    <text x="630" y="85" fill="#e7e9ee" font-size="15">apple 0.90</text>
+    <text x="630" y="105" fill="#e7e9ee" font-size="15">nectarine 0.08</text>
+    <text x="630" y="125" fill="#e7e9ee" font-size="15">pear 0.02</text>
+    <rect x="615" y="190" width="250" height="90" rx="8" fill="#1e2128" stroke="#3a3f4b"/>
+    <text x="630" y="215" fill="#f2b134" font-size="16" font-weight="600">box: 4 numbers</text>
+    <text x="630" y="242" fill="#e7e9ee" font-size="15">x, y, w, h</text>
+    <text x="630" y="264" fill="#9aa1ae" font-size="13">(regression, no softmax)</text>
+    <line x1="870" y1="85" x2="935" y2="140" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a2)"/>
+    <line x1="870" y1="235" x2="935" y2="180" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a2)"/>
+    <text x="900" y="95" fill="#9aa1ae" font-size="14">cross-entropy</text>
+    <text x="900" y="245" fill="#9aa1ae" font-size="14">L2 / smooth L1</text>
+    <rect x="940" y="125" width="220" height="70" rx="8" fill="#1e2128" stroke="#f2b134"/>
+    <text x="1050" y="157" fill="#e7e9ee" font-size="17" text-anchor="middle">L = L_cls + λ · L_box</text>
+    <text x="1050" y="182" fill="#9aa1ae" font-size="13" text-anchor="middle">one network, two heads</text>
+  </svg>
+  <div class="cols" style="grid-template-columns: 1fr 1.25fr; gap:1em; font-size:0.74em; margin-top:0.2em">
+    <div class="box"><h3>scale the targets</h3><ul style="margin:0; padding-left:1.1em"><li>50 px off: L2 = 2500 vs cross-entropy ≈ 1: the box term dominates</li><li>predict <b>fractions</b> of the image size (0…1), balance with $\lambda$</li></ul></div>
+    <div class="box"><h3>the units matter</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.8em; align-items:center">
+        <svg viewBox="0 0 300 132" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+          <rect x="140" y="22" width="20" height="20" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d" stroke-width="2"/>
+          <rect x="150" y="22" width="20" height="20" fill="none" stroke="#f2b134" stroke-width="2" stroke-dasharray="4 2"/>
+          <rect x="226" y="4" width="56" height="56" fill="#5fd38d" fill-opacity="0.25" stroke="#5fd38d" stroke-width="2"/>
+          <rect x="227.4" y="4" width="56" height="56" fill="none" stroke="#f2b134" stroke-width="2" stroke-dasharray="4 2"/>
+          <text x="0" y="36" fill="#9aa1ae" font-size="13">shifted by 10 px</text>
+          <text x="155" y="74" fill="#e7e9ee" font-size="13" text-anchor="middle">20 px</text><text x="255" y="74" fill="#e7e9ee" font-size="13" text-anchor="middle">400 px</text>
+          <text x="0" y="94" fill="#9aa1ae" font-size="13">L2 in pixels</text><text x="155" y="94" fill="#e7e9ee" font-size="14" text-anchor="middle">100</text><text x="255" y="94" fill="#e7e9ee" font-size="14" text-anchor="middle">100</text>
+          <text x="0" y="112" fill="#9aa1ae" font-size="13">IoU</text><text x="155" y="112" fill="#ff6b6b" font-size="14" font-weight="700" text-anchor="middle">0.33</text><text x="255" y="112" fill="#5fd38d" font-size="14" font-weight="700" text-anchor="middle">0.95</text>
+          <text x="0" y="130" fill="#9aa1ae" font-size="13">Δx / w</text><text x="155" y="130" fill="#f2b134" font-size="14" font-weight="700" text-anchor="middle">0.5</text><text x="255" y="130" fill="#f2b134" font-size="14" font-weight="700" text-anchor="middle">0.025</text>
+        </svg>
+        <ul style="margin:0; padding-left:1.1em; font-size:0.92em">
+          <li>pixels: the <b>same loss</b> for a near miss and an almost perfect box</li>
+          <li>in the object's units ($\Delta x / w$, $\log w$) the loss follows the quality</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:0.8em; margin-top:0.4em">Several objects: how many outputs?</p>
+  <p class="credit">Photo: Michal Jarmoluk, Pixabay licence. Scores drawn for illustration.</p>
+</section>
+
+<section>
+  <h2>Many objects, idea 1: a grid of predictions</h2>
+  <div class="cols" style="grid-template-columns: 1.3fr 1fr; gap:1.1em; align-items:center">
+    <div>
+      <svg viewBox="0 0 960 542" style="width:100%; display:block; border-radius:6px; font-family: Inter, Arial, sans-serif">
+      <rect x="0" y="0" width="960" height="542" fill="#111"/><image href="../../assets/lecture07/pears.jpg" x="0" y="0" width="960" height="542" opacity="0.6"/>
+      <rect x="160" y="180.7" width="160" height="180.7" fill="#5fd38d" fill-opacity="0.22"/>
+      <rect x="480" y="180.7" width="160" height="180.7" fill="#5fd38d" fill-opacity="0.22"/>
+      <rect x="320" y="180.7" width="160" height="180.7" fill="#5fd38d" fill-opacity="0.22"/>
+      <rect x="640" y="180.7" width="160" height="180.7" fill="#ff6b6b" fill-opacity="0.22"/>
+      <rect x="116" y="127" width="183" height="285" fill="none" stroke="#5fd38d" stroke-width="2.5" opacity="0.95"/>
+      <rect x="482" y="142" width="190" height="270" fill="none" stroke="#5fd38d" stroke-width="2.5" opacity="0.95"/>
+      <rect x="299" y="119" width="187" height="291" fill="none" stroke="#5fd38d" stroke-width="2.5" opacity="0.95"/>
+      <rect x="668" y="231" width="171" height="185" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.95"/>
+      <line x1="160" y1="0" x2="160" y2="542" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="320" y1="0" x2="320" y2="542" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="480" y1="0" x2="480" y2="542" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="640" y1="0" x2="640" y2="542" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="800" y1="0" x2="800" y2="542" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="0" y1="180.7" x2="960" y2="180.7" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <line x1="0" y1="361.3" x2="960" y2="361.3" stroke="#fff" stroke-width="3" opacity="0.85"/>
+      <circle cx="207.5" cy="269.5" r="8" fill="#5fd38d" stroke="#fff" stroke-width="2.5"/>
+      <rect x="165" y="330.7" width="62" height="26" rx="4" fill="#111" opacity="0.85"/><text x="172" y="349.7" fill="#5fd38d" font-size="19" font-weight="700">pear</text>
+      <circle cx="577.0" cy="277.0" r="8" fill="#5fd38d" stroke="#fff" stroke-width="2.5"/>
+      <rect x="485" y="330.7" width="62" height="26" rx="4" fill="#111" opacity="0.85"/><text x="492" y="349.7" fill="#5fd38d" font-size="19" font-weight="700">pear</text>
+      <circle cx="392.5" cy="264.5" r="8" fill="#5fd38d" stroke="#fff" stroke-width="2.5"/>
+      <rect x="325" y="330.7" width="62" height="26" rx="4" fill="#111" opacity="0.85"/><text x="332" y="349.7" fill="#5fd38d" font-size="19" font-weight="700">pear</text>
+      <circle cx="753.5" cy="323.5" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <rect x="645" y="330.7" width="74" height="26" rx="4" fill="#111" opacity="0.85"/><text x="652" y="349.7" fill="#ff6b6b" font-size="19" font-weight="700">apple</text>
+      <rect x="805" y="6" width="74" height="26" rx="4" fill="#111" opacity="0.85"/><text x="812" y="25" fill="#9aa1ae" font-size="19">empty</text>
+      </svg>
+      <p class="small" style="margin:0.2em 0 0">dots: the centres of the objects; each falls into a different cell</p>
+    </div>
+    <div style="font-size:0.84em">
+      <ul>
+        <li>cut the image into an $S \times S$ grid (here 6×3)</li>
+        <li>each cell predicts the object whose <b>centre</b> falls into it</li>
+        <li>one output vector per cell: <span style="font-family:var(--mono)">[object?, class, x, y, w, h]</span>
+          <br>a pear cell: <span style="font-family:var(--mono)">[1, pear, …]</span>, an empty cell: <span style="font-family:var(--mono)">[0, –]</span></li>
+        <li>a fixed-size output, $S \times S \times (5 + C)$, for any number of objects: YOLO v1 (Redmon et al., 2016)</li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Boxes: OWLv2 (“a pear”, “an apple”), <code>experiments/open_vocab.py</code>.</p>
+</section>
+
+<section>
+  <h2>Idea 1, the problem: several objects in one cell</h2>
+  <div class="cols" style="grid-template-columns: 1.3fr 1fr; gap:1.1em; align-items:center">
+    <div>
+      <svg viewBox="0 0 960 640" style="width:100%; display:block; border-radius:6px; font-family: Inter, Arial, sans-serif">
+      <rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.55"/>
+      <rect x="160" y="480" width="160" height="160" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="480" y="480" width="160" height="160" fill="#ff6b6b" fill-opacity="0.18"/>
+      <rect x="320" y="480" width="160" height="160" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="0" y="480" width="160" height="160" fill="#ff6b6b" fill-opacity="0.18"/>
+      <rect x="160" y="320" width="160" height="160" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="800" y="480" width="160" height="160" fill="#ff6b6b" fill-opacity="0.18"/>
+      <rect x="640" y="480" width="160" height="160" fill="#ff6b6b" fill-opacity="0.18"/>
+      <rect x="269.5" y="407.1" width="97.8" height="232.9" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="526.2" y="445.2" width="102.1" height="194.6" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="338.5" y="399.9" width="153.7" height="240.1" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="72.9" y="455.3" width="129.1" height="126.4" fill="none" stroke="#5ab0ff" stroke-width="2.5" opacity="0.9"/>
+      <rect x="462.0" y="474.6" width="64.6" height="48.4" fill="none" stroke="#5ab0ff" stroke-width="2.5" opacity="0.9"/>
+      <rect x="173.1" y="413.0" width="105.2" height="122.4" fill="none" stroke="#b28dff" stroke-width="2.5" opacity="0.9"/>
+      <rect x="776.0" y="340.9" width="184.0" height="295.7" fill="none" stroke="#f2b134" stroke-width="2.5" opacity="0.9"/>
+      <rect x="692.4" y="466.3" width="106.9" height="172.4" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="691.2" y="431.1" width="45.0" height="152.4" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="0.1" y="393.7" width="53.0" height="246.3" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="582.5" y="477.0" width="36.8" height="43.0" fill="none" stroke="#5ab0ff" stroke-width="2.5" opacity="0.9"/>
+      <rect x="889.3" y="475.6" width="50.6" height="99.0" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="919.7" y="481.9" width="40.3" height="158.1" fill="none" stroke="#ff6b6b" stroke-width="2.5" opacity="0.9"/>
+      <rect x="645.0" y="474.3" width="56.0" height="39.6" fill="none" stroke="#5ab0ff" stroke-width="2.5" opacity="0.9"/>
+      <line x1="160" y1="0" x2="160" y2="640" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="320" y1="0" x2="320" y2="640" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="480" y1="0" x2="480" y2="640" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="640" y1="0" x2="640" y2="640" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="800" y1="0" x2="800" y2="640" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="0" y1="160" x2="960" y2="160" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="0" y1="320" x2="960" y2="320" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <line x1="0" y1="480" x2="960" y2="480" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+      <circle cx="318.4" cy="523.5" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="577.2" cy="542.5" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="415.4" cy="520.0" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="137.4" cy="518.5" r="8" fill="#5ab0ff" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="494.3" cy="498.8" r="8" fill="#5ab0ff" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="225.7" cy="474.2" r="8" fill="#b28dff" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="868.0" cy="488.8" r="8" fill="#f2b134" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="745.8" cy="552.5" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="713.7" cy="507.3" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="26.6" cy="516.9" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="600.9" cy="498.5" r="8" fill="#5ab0ff" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="914.6" cy="525.1" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="939.9" cy="561.0" r="8" fill="#ff6b6b" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="673.0" cy="494.1" r="8" fill="#5ab0ff" stroke="#fff" stroke-width="2.5"/>
+      <rect x="483" y="483" width="154" height="154" fill="none" stroke="#ff6b6b" stroke-width="5"/>
+      <rect x="486" y="488" width="112" height="28" rx="4" fill="#111" opacity="0.85"/><text x="492" y="509" fill="#ff6b6b" font-size="20" font-weight="700">3 centres</text>
+      <rect x="3" y="483" width="154" height="154" fill="none" stroke="#ff6b6b" stroke-width="5"/>
+      <rect x="6" y="488" width="112" height="28" rx="4" fill="#111" opacity="0.85"/><text x="12" y="509" fill="#ff6b6b" font-size="20" font-weight="700">2 centres</text>
+      <rect x="803" y="483" width="154" height="154" fill="none" stroke="#ff6b6b" stroke-width="5"/>
+      <rect x="806" y="488" width="112" height="28" rx="4" fill="#111" opacity="0.85"/><text x="812" y="509" fill="#ff6b6b" font-size="20" font-weight="700">3 centres</text>
+      <rect x="643" y="483" width="154" height="154" fill="none" stroke="#ff6b6b" stroke-width="5"/>
+      <rect x="646" y="488" width="112" height="28" rx="4" fill="#111" opacity="0.85"/><text x="652" y="509" fill="#ff6b6b" font-size="20" font-weight="700">3 centres</text>
+      </svg>
+      <p class="small" style="margin:0.2em 0 0">dots: the centres of the true boxes; red: cells with several centres</p>
+    </div>
+    <div style="font-size:0.84em">
+      <p style="margin-top:0">A real street, a 6×4 grid:</p>
+      <ol>
+        <li><b>one object per cell</b>: here 4 cells hold 2 or 3 centres; all but one are lost</li>
+        <li>one regressor must produce every shape <b>from scratch</b>: a tall person, a wide car, a bus</li>
+      </ol>
+    </div>
+  </div>
+  <p class="credit">True boxes: Faster R-CNN's confident detections (score ≥ 0.9) standing in for annotations, <code>experiments/street_boxes.py</code>.</p>
+</section>
+
+<section>
+  <h2>Idea 2: anchor boxes, start from a guess</h2>
+  <div class="cols" style="grid-template-columns: 0.62fr 1fr 1fr; gap:0.9em; align-items:start">
+    <div>
+      <svg viewBox="0 0 300 330" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+        <rect x="0" y="0" width="300" height="330" rx="8" fill="#1e2128"/>
+        <rect x="113.8" y="131.9" width="72.4" height="36.2" fill="none" stroke="#c9ccd3" stroke-width="1.2" opacity="0.85"/>
+        <rect x="124.4" y="124.4" width="51.2" height="51.2" fill="none" stroke="#c9ccd3" stroke-width="1.2" opacity="0.85"/>
+        <rect x="131.9" y="113.8" width="36.2" height="72.4" fill="none" stroke="#c9ccd3" stroke-width="1.2" opacity="0.85"/>
+        <rect x="77.6" y="113.8" width="144.8" height="72.4" fill="none" stroke="#c9ccd3" stroke-width="1.7999999999999998" opacity="0.85"/>
+        <rect x="98.8" y="98.8" width="102.4" height="102.4" fill="none" stroke="#c9ccd3" stroke-width="1.7999999999999998" opacity="0.85"/>
+        <rect x="113.8" y="77.6" width="72.4" height="144.8" fill="none" stroke="#c9ccd3" stroke-width="1.7999999999999998" opacity="0.85"/>
+        <rect x="5.2" y="77.6" width="289.6" height="144.8" fill="none" stroke="#c9ccd3" stroke-width="2.4" opacity="0.85"/>
+        <rect x="47.6" y="47.6" width="204.8" height="204.8" fill="none" stroke="#c9ccd3" stroke-width="2.4" opacity="0.85"/>
+        <rect x="77.6" y="5.2" width="144.8" height="289.6" fill="none" stroke="#c9ccd3" stroke-width="2.4" opacity="0.85"/>
+        <circle cx="150" cy="150" r="5" fill="#f2b134"/>
+        <text x="10" y="320" fill="#e7e9ee" font-size="15">wide · square · tall, 3 sizes each</text>
+        </svg>
+      <p class="small" style="margin:0.2em 0 0">the anchors of one position: 3 shapes × 3 sizes, always the same</p>
+    </div>
+    <div>
+      <svg viewBox="430 400 250 240" style="width:100%; display:block; border-radius:6px; font-family: Inter, Arial, sans-serif">
+      <rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.55"/>
+      <rect x="462.0" y="474.6" width="64.6" height="48.4" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-dasharray="4 2.5"/>
+      <rect x="464.0" y="464.0" width="64.0" height="64.0" fill="none" stroke="#5fd38d" stroke-width="2.2"/>
+      <rect x="526.2" y="445.2" width="102.1" height="194.6" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-dasharray="4 2.5"/>
+      <rect x="546.7" y="437.5" width="90.5" height="181.0" fill="none" stroke="#5fd38d" stroke-width="2.2"/>
+      <circle cx="496" cy="496" r="3" fill="#f2b134" stroke="#111" stroke-width="0.8"/>
+      <circle cx="592" cy="528" r="3" fill="#f2b134" stroke="#111" stroke-width="0.8"/>
+      <rect x="433" y="403" width="96" height="30" rx="3" fill="#111" opacity="0.85"/><text x="437" y="415" fill="#e7e9ee" font-size="8.5" font-weight="700">car ↔ anchor 64×64</text><text x="437" y="427" fill="#e7e9ee" font-size="8.5">IoU 0.72</text>
+      <rect x="585" y="403" width="92" height="30" rx="3" fill="#111" opacity="0.85"/><text x="589" y="415" fill="#e7e9ee" font-size="8.5" font-weight="700">person ↔ 91×181</text><text x="589" y="427" fill="#e7e9ee" font-size="8.5">IoU 0.64</text>
+      </svg>
+      <p class="small" style="margin:0.2em 0 0"><span style="display:inline-block; width:1.6em; border-top:3px dashed #ffffff; vertical-align:middle"></span> true box &nbsp; <span style="display:inline-block; width:1.6em; border-top:3px solid #5fd38d; vertical-align:middle"></span> the anchor that learns it<br>the street, zoomed on a person and a car that shared one grid cell</p>
+    </div>
+    <div style="font-size:0.8em">
+      <ul style="margin-top:0">
+        <li>put the same $K$ boxes, the <b>anchors</b>, at many positions (every 32 px here)</li>
+        <li>each anchor answers only: <b>“is there an object like me, here?”</b> a class out of $C + 1$ (+1: background), and a small <b>correction</b>: 4 offsets</li>
+        <li>the person and the car, in one cell before, now belong to different anchors: different positions and shapes</li>
+        <li>the network does not draw boxes from scratch: it <b>nudges a nearby guess</b></li>
+      </ul>
+      <p class="small">Faster R-CNN (Ren et al., 2015), SSD, RetinaNet, YOLO v2 and later.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Training: which anchor learns which object?</h2>
+  <div data-widget="anchors" data-config='{"src":"../../assets/lecture07/street.jpg","data":"../../assets/lecture07/data/street_boxes.json","width":520,"stride":32,"sizes":[64,128,256],"ratios":[0.5,1,2],"classes":["person","car","bus","truck"],"minScore":0.9,"at":[592,528],"zoom":true,"zoomWidth":270,"pairs":true,"pairWidth":250}'></div>
+  <p style="font-size:0.74em; margin:0.3em 0 0">IoU ≥ 0.5 → <b>object</b>: its class + 4 offsets · IoU &lt; 0.4 → <b>background</b> · in between → <b>ignored</b> · every object also gets its <b>best</b> anchor, even below 0.5: otherwise small or thin objects would never be learned</p>
+</section>
+
+<section>
+  <h2>The offsets: the box in the anchor's own units</h2>
+  <div class="cols" style="grid-template-columns: 0.75fr 1.25fr; gap:1.2em; align-items:start">
+    <div>
+      <svg viewBox="496 416 200 240" style="width:100%; display:block; border-radius:6px; font-family: Inter, Arial, sans-serif">
+      <rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.55"/>
+      <defs><marker id="ofA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f2b134"/></marker></defs>
+      <rect x="546.7" y="437.5" width="90.5" height="181.0" fill="none" stroke="#5fd38d" stroke-width="2.2" opacity="1"/>
+      <rect x="526.2" y="445.2" width="102.1" height="194.6" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-dasharray="4 2.5" opacity="1"/>
+      <circle cx="592.0" cy="528.0" r="3" fill="#5fd38d"/><circle cx="577.2" cy="542.5" r="3" fill="#ffffff"/>
+      <line x1="592.0" y1="528.0" x2="578.8" y2="541.0" stroke="#f2b134" stroke-width="1.4" marker-end="url(#ofA)"/>
+      <text x="548.7" y="434.5" fill="#5fd38d" font-size="9" font-weight="700">anchor: 91×181</text>
+      <text x="528.2" y="635.8" fill="#ffffff" font-size="9" font-weight="700">true box: 102×195</text>
+      </svg>
+    </div>
+    <div style="font-size:0.84em">
+      <p style="margin-top:0">anchor (green): centre $(x_a, y_a)$, size $w_a \times h_a$; true box (dashed): $(x, y)$, $w \times h$. The targets:</p>
+      $$\begin{aligned} t_x &= \frac{x - x_a}{w_a} = -0.16, & t_w &= \log \frac{w}{w_a} = 0.12\\ t_y &= \frac{y - y_a}{h_a} = 0.08, & t_h &= \log \frac{h}{h_a} = 0.07 \end{aligned}$$
+      <ul>
+        <li><b>divided by the anchor's size</b>: the same numbers for a small and a large object (the “units matter” slide); targets stay around 0</li>
+        <li><b>log of the ratio</b>: $w = w_a e^{t_w}$ is always positive, and ×2 and ×½ are symmetric: $\pm 0.69$</li>
+        <li>$t = 0$ means “the anchor itself”: an untrained head already outputs a sensible box</li>
+        <li>at test time, decode: $x = x_a + w_a t_x$, $w = w_a e^{t_w}$; loss: smooth L1 on $t$, only for object anchors</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Grid + anchors = a single-stage detector</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.2em; align-items:start">
+    <div>
+      <div data-widget="volumes" data-config='{"items":[{"type":"vol","h":224,"w":224,"c":3,"label":"image"},{"type":"op","text":"backbone","sub":"ResNet, …","width":100},{"type":"vol","h":14,"w":14,"c":256,"label":"S×S×256"},{"type":"op","text":"conv 3×3","sub":"the head","width":100},{"type":"vol","h":14,"w":14,"c":720,"label":"S×S×A·(C+1+4)","color":"#f2b134"}],"hs":10,"cs":2.4,"width":640,"height":250}'></div>
+      <ul style="font-size:0.82em">
+        <li>the head is one more convolution: every position, every anchor, in one pass</li>
+      </ul>
+    </div>
+    <div style="font-size:0.82em">
+      <ul>
+        <li>YOLO (since 2016), SSD (2016), RetinaNet (2017)</li>
+        <li>Faster R-CNN on our crowd photo: <b>214,830 anchors</b> on 5 feature maps; a few dozen people</li>
+        <li>almost every anchor is easy background: its loss swamps the few objects</li>
+        <li><b>focal loss</b> (RetinaNet): down-weight the easy examples
+          $$\mathrm{FL}(p_t) = -(1-p_t)^{\gamma}\log p_t,\quad \gamma = 2$$
+          $p_t$ = predicted probability of the true class; $\gamma = 0$ gives cross-entropy</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Non-maximum suppression (NMS)</h2>
+  <div class="cols" style="grid-template-columns: 1.55fr 1fr; gap:1.0em; align-items:start">
+    <div data-widget="nmsview" data-config='{"src":"../../assets/lecture07/crowd.jpg","data":"../../assets/lecture07/data/crowd_raw.json","width":740,"minScore":0.5,"thr":0.5,"show":"raw"}'></div>
+    <div style="font-size:0.82em">
+      <p style="margin-top:0">Neighbouring anchors fire for the same object: hundreds of overlapping boxes. Keep one per object:</p>
+      <ol>
+        <li>sort the boxes by score</li>
+        <li>take the best remaining box: keep it</li>
+        <li>remove every box of the same class with IoU &gt; threshold (0.5) with it</li>
+        <li>repeat with the next remaining box</li>
+      </ol>
+      <p>Our crowd photo: <b>317 boxes</b> with score ≥ 0.5 → <b>37</b> after NMS.</p>
+      <p class="small">Raw output of Faster R-CNN with its own NMS switched off; NMS runs here, in the browser.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Check yourself</h2>
+  <div class="question bigq" style="margin-top:1.2em">In what situation is NMS likely to remove a correct detection?</div>
+</section>
+
+<section>
+  <h2>Answer: when objects overlap</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 420 300" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+      <rect x="120" y="40" width="130" height="240" fill="#5fd38d" fill-opacity="0.12" stroke="#5fd38d" stroke-width="3"/>
+      <rect x="160" y="30" width="130" height="250" fill="none" stroke="#ff6b6b" stroke-width="3" stroke-dasharray="9 6"/>
+      <text x="120" y="24" fill="#5fd38d" font-size="15" font-weight="600">person, higher score: kept</text>
+      <text x="290" y="298" fill="#ff6b6b" font-size="15" font-weight="600" text-anchor="end">person, lower score: removed</text>
+      <text x="205" y="160" fill="#e7e9ee" font-size="16" text-anchor="middle">IoU 0.51 &gt; 0.5</text>
+    </svg>
+    <div style="font-size:0.88em">
+      <ul>
+        <li>two different people, one partly behind the other: their boxes have a large IoU, NMS treats them as duplicates</li>
+        <li>our crowd photo: with the threshold 0.3 instead of 0.5, NMS deletes 4 more people (pairs with IoU 0.31 to 0.36)</li>
+        <li>a higher threshold keeps more duplicates: there is no right value for crowds</li>
+        <li>remedies: Soft-NMS (lower the score instead of deleting), or detectors without NMS (DETR, at the end)</li>
+      </ul>
+      <p class="small">Try the IoU slider on the previous NMS slide.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>A nasty case: crayons</h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; gap:1.0em; align-items:start">
+    <div data-widget="crayonsnms" data-config='{"angle":45,"thr":0.5,"width":520,"thick":18,"gap":3}'></div>
+    <div style="font-size:0.84em">
+      <ul style="margin-top:0">
+        <li>6 crayons side by side, 6 <b>correct</b> boxes; the crayons never touch</li>
+        <li>at 45° each axis-aligned box is a big, mostly empty square, and the neighbours' squares overlap: IoU 0.72 (two apart: still above 0.5)</li>
+        <li>NMS at 0.5 keeps <b>2 of 6</b> correct crayons; at 0° it keeps all 6 (move the angle slider)</li>
+        <li>thin, tilted, packed objects: pens, ships in a harbour, cars in a car park seen from above, lines of text</li>
+        <li>remedies: <b>rotated boxes</b>, <b>masks</b> instead of boxes, detectors without NMS (DETR)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Two-stage detection: first <i>where</i>, then <i>what</i></h2>
+  <div class="cols" style="grid-template-columns: 1fr 0.9fr 1fr; gap:1.0em; align-items:start; font-size:0.8em">
+    <div><p style="margin:0 0 0.3em"><b style="color:#5fd38d">stage 1</b>: “is there <b>any</b> object here?”</p><svg viewBox="0 0 960 640" style="width:100%; display:block; border-radius:6px"><rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.6"/><rect x="174" y="414" width="102" height="119" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="73" y="455" width="130" height="126" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="0" y="411" width="78" height="218" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="776" y="350" width="184" height="289" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="462" y="475" width="64" height="48" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="170" y="441" width="95" height="98" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="327" y="334" width="17" height="33" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="413" y="334" width="18" height="36" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="1" y="408" width="56" height="228" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="583" y="477" width="37" height="42" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="528" y="460" width="94" height="180" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="339" y="400" width="152" height="240" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="433" y="428" width="5" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="433" y="430" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="266" y="407" width="103" height="233" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="273" y="417" width="90" height="221" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="432" y="428" width="5" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="434" y="429" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="434" y="427" width="6" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="691" y="430" width="45" height="153" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="432" y="430" width="8" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="618" y="474" width="19" height="34" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="414" y="442" width="51" height="50" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="645" y="473" width="53" height="41" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="432" y="430" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="0" y="403" width="86" height="222" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="502" y="470" width="40" height="44" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="528" y="510" width="94" height="127" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="278" y="467" width="11" height="26" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="434" y="428" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="711" y="479" width="91" height="161" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="683" y="437" width="52" height="166" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="504" y="395" width="8" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="431" y="431" width="11" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="676" y="513" width="126" height="127" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="433" y="428" width="4" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="460" y="397" width="9" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="11" y="406" width="74" height="193" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="920" y="530" width="40" height="110" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="429" y="432" width="16" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="684" y="449" width="65" height="191" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="723" y="412" width="63" height="108" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="920" y="483" width="40" height="157" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="435" y="429" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="458" y="471" width="13" height="27" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="692" y="462" width="72" height="178" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="324" y="334" width="16" height="32" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="572" y="377" width="14" height="28" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="890" y="476" width="48" height="100" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="674" y="468" width="136" height="171" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="434" y="429" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="284" y="399" width="49" height="81" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="276" y="398" width="69" height="223" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="930" y="480" width="29" height="153" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="454" y="471" width="14" height="31" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="461" y="469" width="73" height="46" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="149" y="373" width="9" height="24" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="586" y="445" width="18" height="13" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="696" y="423" width="64" height="147" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="657" y="376" width="13" height="29" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="488" y="469" width="51" height="48" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="605" y="403" width="8" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="694" y="413" width="97" height="127" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="487" y="460" width="28" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="724" y="504" width="84" height="134" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="403" width="7" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="506" y="472" width="32" height="33" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="461" y="472" width="10" height="24" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="618" y="464" width="23" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="474" y="472" width="73" height="43" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="405" width="8" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="718" y="413" width="71" height="160" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="410" y="334" width="17" height="36" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="606" y="430" width="11" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="592" y="427" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="457" y="473" width="15" height="36" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="430" y="432" width="7" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="559" y="400" width="6" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="603" y="408" width="8" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="693" y="440" width="37" height="125" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="607" y="432" width="12" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="892" y="474" width="55" height="152" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="280" y="413" width="150" height="218" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="590" y="427" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="618" y="481" width="18" height="28" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="596" y="427" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="602" y="429" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="581" y="426" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="576" y="426" width="11" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="435" y="427" width="5" height="6" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="481" y="473" width="54" height="49" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="560" y="399" width="6" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="431" y="431" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="602" y="418" width="8" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="522" y="454" width="21" height="19" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="594" y="427" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="425" y="436" width="23" height="24" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="436" y="429" width="4" height="6" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="593" y="472" width="39" height="43" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="620" y="477" width="18" height="29" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="454" y="474" width="13" height="42" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="412" width="7" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="129" y="370" width="7" height="23" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="436" y="428" width="4" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="558" y="402" width="8" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="430" width="11" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="646" y="473" width="73" height="40" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="503" y="396" width="8" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="696" y="486" width="10" height="34" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="584" y="484" width="34" height="35" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="283" y="448" width="11" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="278" y="465" width="11" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="889" y="478" width="54" height="105" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="526" y="445" width="103" height="195" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="608" y="432" width="12" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="598" y="427" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="430" y="428" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="606" y="403" width="7" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="668" y="531" width="108" height="106" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="461" y="474" width="12" height="32" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="459" y="470" width="11" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="472" y="458" width="11" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="598" y="429" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="488" y="463" width="24" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="488" y="462" width="50" height="43" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="599" y="423" width="8" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="685" y="468" width="117" height="161" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="605" y="411" width="7" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="620" y="467" width="27" height="19" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="464" y="472" width="10" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="417" y="443" width="47" height="69" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="430" y="430" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="675" y="564" width="132" height="76" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="594" y="472" width="28" height="32" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="282" y="447" width="12" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="454" y="471" width="12" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="599" y="416" width="7" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="430" y="432" width="8" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="453" y="473" width="12" height="32" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="752" y="591" width="56" height="48" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="284" y="402" width="70" height="144" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="412" y="342" width="16" height="28" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="714" y="406" width="83" height="234" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="562" y="398" width="6" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="559" y="402" width="5" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="600" y="427" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="31" y="543" width="30" height="63" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="431" y="430" width="6" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="434" y="428" width="5" height="6" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="281" y="403" width="56" height="119" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="324" y="337" width="10" height="30" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="561" y="399" width="6" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="563" y="426" width="11" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="509" y="396" width="7" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="470" y="468" width="10" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="743" y="580" width="65" height="60" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="471" y="459" width="10" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="485" y="429" width="4" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="591" y="428" width="9" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="601" y="425" width="8" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="476" y="458" width="16" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="547" y="428" width="13" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="432" y="435" width="9" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="602" y="405" width="6" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="553" y="428" width="12" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="692" y="419" width="50" height="134" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="570" y="426" width="11" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="550" y="428" width="12" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="559" y="427" width="11" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="694" y="482" width="11" height="35" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="280" y="467" width="10" height="25" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="546" y="429" width="13" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="488" y="457" width="28" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="575" y="382" width="11" height="24" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="474" y="458" width="14" height="13" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="544" y="428" width="13" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="621" y="483" width="15" height="24" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="559" y="400" width="8" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="465" y="472" width="10" height="17" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="669" y="435" width="63" height="188" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="60" y="444" width="149" height="144" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="472" y="465" width="10" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="702" y="495" width="85" height="145" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="540" y="447" width="13" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="608" y="431" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="597" y="429" width="10" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="691" y="442" width="27" height="123" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="33" y="526" width="34" height="81" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="573" y="378" width="12" height="19" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="430" y="427" width="6" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="471" y="466" width="12" height="17" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="690" y="428" width="111" height="212" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="573" y="382" width="11" height="23" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="595" y="428" width="8" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="469" y="462" width="10" height="13" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="470" y="465" width="9" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="615" y="477" width="21" height="35" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="462" y="397" width="8" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="598" y="425" width="8" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="462" y="471" width="10" height="18" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="594" y="431" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="584" y="427" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="558" y="402" width="5" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="473" y="461" width="9" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="478" y="459" width="12" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="424" width="8" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="529" y="553" width="91" height="87" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="469" y="469" width="12" height="18" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="597" y="427" width="9" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="596" y="436" width="11" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="593" y="462" width="18" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="567" y="426" width="10" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="435" y="425" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="622" y="432" width="7" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="677" y="428" width="50" height="154" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="921" y="560" width="38" height="78" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="470" y="470" width="19" height="21" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="318" y="419" width="53" height="215" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="696" y="488" width="10" height="42" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="468" y="472" width="13" height="20" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="433" y="427" width="5" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="603" y="427" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="278" y="467" width="9" height="21" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="475" y="463" width="11" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="584" y="429" width="11" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="674" y="482" width="64" height="158" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="279" y="459" width="13" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="506" y="442" width="21" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="547" y="440" width="15" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="697" y="408" width="94" height="196" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="660" y="472" width="18" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="472" y="461" width="9" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="623" y="432" width="7" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="605" y="424" width="7" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="480" y="458" width="13" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="432" y="434" width="9" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="621" y="465" width="31" height="19" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="618" y="467" width="18" height="29" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="477" y="461" width="11" height="13" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="554" y="441" width="16" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="279" y="451" width="14" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="595" y="427" width="8" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="326" y="334" width="28" height="34" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="593" y="444" width="12" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="596" y="431" width="11" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="615" y="466" width="20" height="37" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="281" y="449" width="12" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="475" y="461" width="10" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="564" y="398" width="7" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="586" y="427" width="9" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="558" y="428" width="10" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="732" y="414" width="62" height="171" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="428" y="434" width="8" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="664" y="473" width="10" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="545" y="440" width="14" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="471" y="457" width="13" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="340" y="426" width="42" height="208" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="321" y="336" width="24" height="33" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="589" y="444" width="13" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="544" y="438" width="14" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="558" y="403" width="8" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="320" y="342" width="9" height="23" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="597" y="406" width="6" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="587" y="431" width="10" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="738" y="601" width="70" height="39" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="606" y="467" width="15" height="20" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="596" y="424" width="8" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="284" y="449" width="9" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="473" y="465" width="15" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="557" y="408" width="9" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="587" y="428" width="9" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="609" y="418" width="6" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="731" y="565" width="79" height="74" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="329" y="433" width="32" height="105" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="483" y="430" width="4" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="625" y="432" width="7" height="16" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="552" y="429" width="12" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="594" y="441" width="11" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="596" y="420" width="7" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="481" y="458" width="18" height="15" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="199" y="326" width="13" height="22" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="608" y="410" width="6" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="560" y="401" width="5" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="600" y="406" width="6" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="595" y="426" width="7" height="7" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="546" y="422" width="9" height="8" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="607" y="405" width="7" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="599" y="407" width="6" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="604" y="406" width="6" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="663" y="474" width="15" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="621" y="431" width="6" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="540" y="445" width="13" height="14" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="547" y="433" width="12" height="11" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="331" y="336" width="13" height="30" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="485" y="429" width="4" height="6" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="619" y="430" width="7" height="10" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="588" y="447" width="15" height="12" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="419" y="438" width="33" height="38" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="270" y="428" width="57" height="199" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/><rect x="598" y="461" width="16" height="9" fill="none" stroke="#5fd38d" stroke-width="2" opacity="0.45"/></svg>
+      <p class="small" style="margin:0.3em 0 0">region proposal network: on every anchor, object or not + 4 offsets. Keep the top 1,000 boxes, <b>no class</b> (300 shown).</p></div>
+    <div><p style="margin:0 0 0.3em"><b style="color:#b28dff">stage 2</b>: look closer at each box</p><div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:0.4em"><div style="text-align:center"><svg viewBox="446 411 264 264" style="width:100%; display:block; border-radius:6px"><rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.6"/><rect x="526" y="445" width="103" height="195" fill="none" stroke="#ff6b6b" stroke-width="5.489999999999999" /></svg><div style="font-size:0.85em; color:#ff6b6b; font-weight:700; margin-top:0.1em">person 1.00</div></div><div style="text-align:center"><svg viewBox="451 455 87 87" style="width:100%; display:block; border-radius:6px"><rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.6"/><rect x="462" y="475" width="64" height="48" fill="none" stroke="#5ab0ff" stroke-width="1.8140625000000001" /></svg><div style="font-size:0.85em; color:#5ab0ff; font-weight:700; margin-top:0.1em">car 0.99</div></div><div style="text-align:center"><svg viewBox="629 397 199 199" style="width:100%; display:block; border-radius:6px"><rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.6"/><rect x="696" y="423" width="64" height="147" fill="none" stroke="#9aa1ae" stroke-width="4.145624999999999" /></svg><div style="font-size:0.85em; color:#9aa1ae; font-weight:700; margin-top:0.1em">background 0.83</div></div></div>
+      <p class="small" style="margin:0.3em 0 0">crop its features (RoIAlign), then: a class out of $C + 1$ and a refined box. Here 716 of the 1,000 proposals end up “background”.</p></div>
+    <div><p style="margin:0 0 0.3em"><b>result</b>, after NMS</p><svg viewBox="0 0 960 640" style="width:100%; display:block; border-radius:6px"><rect x="0" y="0" width="960" height="640" fill="#111"/><image href="../../assets/lecture07/street.jpg" x="0" y="0" width="960" height="640" opacity="0.6"/><rect x="270" y="407" width="98" height="233" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="526" y="445" width="102" height="195" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="338" y="400" width="154" height="240" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="73" y="455" width="129" height="126" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="462" y="475" width="65" height="48" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="173" y="413" width="105" height="122" fill="none" stroke="#b28dff" stroke-width="3.5" /><rect x="776" y="341" width="184" height="296" fill="none" stroke="#f2b134" stroke-width="3.5" /><rect x="692" y="466" width="107" height="172" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="691" y="431" width="45" height="152" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="0" y="394" width="53" height="246" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="582" y="477" width="37" height="43" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="889" y="476" width="51" height="99" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="920" y="482" width="40" height="158" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="645" y="474" width="56" height="40" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="278" y="467" width="11" height="26" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="729" y="408" width="59" height="111" fill="none" stroke="#f2b134" stroke-width="3.5" /><rect x="11" y="414" width="73" height="193" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="414" y="442" width="52" height="50" fill="none" stroke="#f2b134" stroke-width="3.5" /><rect x="607" y="432" width="12" height="9" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="684" y="442" width="63" height="196" fill="none" stroke="#ff6b6b" stroke-width="3.5" /><rect x="522" y="454" width="20" height="19" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="618" y="474" width="19" height="33" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="586" y="445" width="18" height="13" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="488" y="461" width="27" height="15" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="506" y="472" width="36" height="43" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="618" y="464" width="23" height="21" fill="none" stroke="#5ab0ff" stroke-width="3.5" /><rect x="270" y="383" width="76" height="22" fill="#ff6b6b"/><text x="274" y="399" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text><rect x="526" y="421" width="76" height="22" fill="#ff6b6b"/><text x="531" y="437" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text><rect x="338" y="376" width="76" height="22" fill="#ff6b6b"/><text x="344" y="392" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text><rect x="73" y="431" width="43" height="22" fill="#5ab0ff"/><text x="78" y="447" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">car</text><rect x="173" y="389" width="65" height="22" fill="#b28dff"/><text x="178" y="405" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">truck</text><rect x="776" y="317" width="43" height="22" fill="#f2b134"/><text x="781" y="333" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">bus</text><rect x="692" y="442" width="76" height="22" fill="#ff6b6b"/><text x="697" y="458" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text><rect x="0" y="370" width="76" height="22" fill="#ff6b6b"/><text x="5" y="386" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text><rect x="11" y="390" width="43" height="22" fill="#5ab0ff"/><text x="16" y="406" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">car</text><rect x="684" y="418" width="76" height="22" fill="#ff6b6b"/><text x="689" y="434" fill="#111" font-size="17" font-weight="700" font-family="Inter, Arial, sans-serif">person</text></svg>
+      <p class="small" style="margin:0.3em 0 0">38 detections with score ≥ 0.7</p></div>
+  </div>
+  <div class="takeaway" style="font-size:0.84em; margin-top:0.6em">Stage 1 is the single-stage detector you know, with 2 classes. Stage 2 spends more computation only on the few promising boxes: slower, often more accurate.</div>
+  <p class="credit">Our run: torchvision Faster R-CNN v2 (COCO) on the street photo, its two stages read out separately, <code>experiments/two_stage.py</code>.</p>
+</section>
+
+<section>
+  <h2>Faster R-CNN (Ren et al., 2015): the architecture</h2>
+  <svg viewBox="0 0 1180 330" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+    <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+    <image href="../../assets/lecture07/crowd.jpg" x="10" y="90" width="230" height="108"/>
+    <line x1="245" y1="144" x2="285" y2="144" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <polygon points="290,100 380,120 380,170 290,190" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff" stroke-width="1.5"/>
+    <text x="335" y="150" fill="#e7e9ee" font-size="15" text-anchor="middle">backbone</text>
+    <line x1="385" y1="144" x2="425" y2="144" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <g fill="#5ab0ff" fill-opacity="0.18" stroke="#5ab0ff"><rect x="430" y="95" width="150" height="100"/><rect x="438" y="88" width="150" height="100"/></g>
+    <text x="513" y="215" fill="#e7e9ee" font-size="14" text-anchor="middle">feature map (once)</text>
+    <rect x="470" y="110" width="30" height="62" fill="none" stroke="#f2b134" stroke-width="2.5"/>
+    <rect x="520" y="115" width="28" height="55" fill="none" stroke="#f2b134" stroke-width="2.5"/>
+    <!-- RPN -->
+    <line x1="513" y1="225" x2="513" y2="255" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <rect x="410" y="260" width="210" height="58" rx="8" fill="#1e2128" stroke="#5fd38d"/>
+    <text x="515" y="284" fill="#5fd38d" font-size="15" font-weight="600" text-anchor="middle">stage 1: region proposal net</text>
+    <text x="515" y="306" fill="#9aa1ae" font-size="13" text-anchor="middle">anchors: object or not + offsets</text>
+    <path d="M 410 289 C 360 289, 360 60, 470 60 L 485 100" fill="none" stroke="#5fd38d" stroke-width="2" marker-end="url(#a3)"/>
+    <text x="300" y="56" fill="#5fd38d" font-size="14">~1000 proposals (boxes, no class)</text>
+    <!-- RoIAlign -->
+    <line x1="595" y1="140" x2="680" y2="140" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <text x="638" y="128" fill="#f2b134" font-size="14" text-anchor="middle">RoIAlign</text>
+    <text x="638" y="162" fill="#9aa1ae" font-size="12" text-anchor="middle">crop + resize</text>
+    <g fill="#f2b134" fill-opacity="0.3" stroke="#f2b134"><rect x="690" y="100" width="50" height="50"/><rect x="698" y="108" width="50" height="50"/><rect x="706" y="116" width="50" height="50"/></g>
+    <text x="725" y="190" fill="#e7e9ee" font-size="14" text-anchor="middle">a fixed-size crop</text>
+    <line x1="765" y1="140" x2="815" y2="140" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <polygon points="820,105 900,120 900,160 820,175" fill="#b28dff" fill-opacity="0.25" stroke="#b28dff" stroke-width="1.5"/>
+    <text x="860" y="145" fill="#e7e9ee" font-size="14" text-anchor="middle">head</text>
+    <line x1="905" y1="140" x2="950" y2="140" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a3)"/>
+    <rect x="955" y="95" width="215" height="90" rx="8" fill="#1e2128" stroke="#b28dff"/>
+    <text x="970" y="120" fill="#b28dff" font-size="15" font-weight="600">stage 2, per proposal:</text>
+    <text x="970" y="145" fill="#e7e9ee" font-size="14">class out of C + 1</text>
+    <text x="970" y="168" fill="#e7e9ee" font-size="14">refined box (4 offsets)</text>
+    <text x="1062" y="215" fill="#9aa1ae" font-size="13" text-anchor="middle">then NMS</text>
+  </svg>
+  <p style="font-size:0.8em; margin-top:0.3em">History: R-CNN (2014) ran the CNN on every crop of the image; Fast R-CNN (2015) runs it <b>once</b> and crops the feature map; Faster R-CNN (2015) also makes the proposals with a network.</p>
+</section>
+
+<section class="optional">
+  <h2>RoI pooling and RoIAlign: a fixed-size crop of the feature map <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 560 330" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+      <g stroke="#3a3f4b" stroke-width="1">
+        <line x1="20" y1="20" x2="20" y2="300"/><line x1="55" y1="20" x2="55" y2="300"/><line x1="90" y1="20" x2="90" y2="300"/><line x1="125" y1="20" x2="125" y2="300"/><line x1="160" y1="20" x2="160" y2="300"/><line x1="195" y1="20" x2="195" y2="300"/><line x1="230" y1="20" x2="230" y2="300"/><line x1="265" y1="20" x2="265" y2="300"/><line x1="300" y1="20" x2="300" y2="300"/>
+        <line x1="20" y1="20" x2="300" y2="20"/><line x1="20" y1="55" x2="300" y2="55"/><line x1="20" y1="90" x2="300" y2="90"/><line x1="20" y1="125" x2="300" y2="125"/><line x1="20" y1="160" x2="300" y2="160"/><line x1="20" y1="195" x2="300" y2="195"/><line x1="20" y1="230" x2="300" y2="230"/><line x1="20" y1="265" x2="300" y2="265"/><line x1="20" y1="300" x2="300" y2="300"/>
+      </g>
+      <rect x="70" y="48" width="160" height="200" fill="#f2b134" fill-opacity="0.12" stroke="#f2b134" stroke-width="3"/>
+      <line x1="150" y1="48" x2="150" y2="248" stroke="#f2b134" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <line x1="70" y1="148" x2="230" y2="148" stroke="#f2b134" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <g fill="#5ab0ff"><circle cx="90" cy="73" r="4"/><circle cx="130" cy="73" r="4"/><circle cx="90" cy="123" r="4"/><circle cx="130" cy="123" r="4"/>
+        <circle cx="170" cy="73" r="4"/><circle cx="210" cy="73" r="4"/><circle cx="170" cy="123" r="4"/><circle cx="210" cy="123" r="4"/>
+        <circle cx="90" cy="173" r="4"/><circle cx="130" cy="173" r="4"/><circle cx="90" cy="223" r="4"/><circle cx="130" cy="223" r="4"/>
+        <circle cx="170" cy="173" r="4"/><circle cx="210" cy="173" r="4"/><circle cx="170" cy="223" r="4"/><circle cx="210" cy="223" r="4"/></g>
+      <text x="160" y="322" fill="#9aa1ae" font-size="14" text-anchor="middle">feature map; a proposal does not follow the grid</text>
+      <line x1="315" y1="150" x2="375" y2="150" stroke="#9aa1ae" stroke-width="2"/><polygon points="385,150 374,144 374,156" fill="#9aa1ae"/>
+      <g fill="#f2b134" fill-opacity="0.3" stroke="#f2b134" stroke-width="1.5"><rect x="395" y="100" width="50" height="50"/><rect x="445" y="100" width="50" height="50"/><rect x="395" y="150" width="50" height="50"/><rect x="445" y="150" width="50" height="50"/></g>
+      <text x="445" y="225" fill="#9aa1ae" font-size="14" text-anchor="middle">2×2 output (7×7 in practice)</text>
+    </svg>
+    <div style="font-size:0.86em">
+      <ul>
+        <li>proposals have different sizes, the head needs a fixed input: split the proposal into a fixed grid of bins and pool each bin</li>
+        <li><b>RoI pooling</b> (Fast R-CNN): rounds the box to the feature grid, max over each bin; the rounding shifts the box by up to a feature-map pixel (16 image pixels)</li>
+        <li><b>RoIAlign</b> (Mask R-CNN): no rounding; sample a few points per bin (blue) by bilinear interpolation, then average. Matters for masks</li>
+      </ul>
+<pre class="code">torchvision.ops.roi_align(features, boxes,
+    output_size=7, spatial_scale=1/16, sampling_ratio=2)</pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>FPN (Lin et al., 2017): every size on its own level</h2>
+  <div class="cols" style="grid-template-columns: 1.1fr 1fr; gap:1.2em; align-items:start">
+    <div>
+      <svg viewBox="0 0 600 385" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+      <defs><marker id="fpA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+      <text x="120" y="22" fill="#5ab0ff" font-size="14" text-anchor="middle" font-weight="600">bottom-up: the backbone</text>
+      <text x="390" y="22" fill="#b28dff" font-size="14" text-anchor="middle" font-weight="600">top-down + lateral</text>
+      <rect x="45.0" y="317" width="150" height="26" rx="3" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="120" y="335" fill="#e7e9ee" font-size="13" text-anchor="middle">C2</text>
+      <text x="37.0" y="335" fill="#9aa1ae" font-size="12" text-anchor="end">1/4</text>
+      <rect x="315.0" y="317" width="150" height="26" rx="3" fill="#b28dff" fill-opacity="0.3" stroke="#b28dff"/><text x="390" y="335" fill="#e7e9ee" font-size="13" text-anchor="middle">P2</text>
+      <line x1="120" y1="315" x2="120" y2="260" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="198.0" y1="330" x2="276.0" y2="330" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/><text x="241.0" y="325" fill="#9aa1ae" font-size="11" text-anchor="middle">1×1</text>
+      <circle cx="287.0" cy="330" r="9" fill="none" stroke="#e7e9ee" stroke-width="1.4"/><text x="287.0" y="335" fill="#e7e9ee" font-size="14" text-anchor="middle">+</text>
+      <line x1="297.0" y1="330" x2="312.0" y2="330" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="339.0" y1="259" x2="291.0" y2="320" stroke="#b28dff" stroke-width="1.6" marker-end="url(#fpA)"/><text x="297.0" y="291.5" fill="#b28dff" font-size="11">×2</text>
+      <line x1="468.0" y1="330" x2="487" y2="330" stroke="#f2b134" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <rect x="490" y="317" width="52" height="26" rx="5" fill="#f2b134" fill-opacity="0.2" stroke="#f2b134"/><text x="516" y="335" fill="#e7e9ee" font-size="12" text-anchor="middle">head</text>
+      <rect x="65.0" y="232" width="110" height="26" rx="3" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="120" y="250" fill="#e7e9ee" font-size="13" text-anchor="middle">C3</text>
+      <text x="57.0" y="250" fill="#9aa1ae" font-size="12" text-anchor="end">1/8</text>
+      <rect x="335.0" y="232" width="110" height="26" rx="3" fill="#b28dff" fill-opacity="0.3" stroke="#b28dff"/><text x="390" y="250" fill="#e7e9ee" font-size="13" text-anchor="middle">P3</text>
+      <line x1="120" y1="230" x2="120" y2="180" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="178.0" y1="245" x2="296.0" y2="245" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/><text x="241.0" y="240" fill="#9aa1ae" font-size="11" text-anchor="middle">1×1</text>
+      <circle cx="307.0" cy="245" r="9" fill="none" stroke="#e7e9ee" stroke-width="1.4"/><text x="307.0" y="250" fill="#e7e9ee" font-size="14" text-anchor="middle">+</text>
+      <line x1="317.0" y1="245" x2="332.0" y2="245" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="356.5" y1="179" x2="311.0" y2="235" stroke="#b28dff" stroke-width="1.6" marker-end="url(#fpA)"/><text x="315.75" y="209.0" fill="#b28dff" font-size="11">×2</text>
+      <line x1="448.0" y1="245" x2="487" y2="245" stroke="#f2b134" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <rect x="490" y="232" width="52" height="26" rx="5" fill="#f2b134" fill-opacity="0.2" stroke="#f2b134"/><text x="516" y="250" fill="#e7e9ee" font-size="12" text-anchor="middle">head</text>
+      <rect x="82.5" y="152" width="75" height="26" rx="3" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="120" y="170" fill="#e7e9ee" font-size="13" text-anchor="middle">C4</text>
+      <text x="74.5" y="170" fill="#9aa1ae" font-size="12" text-anchor="end">1/16</text>
+      <rect x="352.5" y="152" width="75" height="26" rx="3" fill="#b28dff" fill-opacity="0.3" stroke="#b28dff"/><text x="390" y="170" fill="#e7e9ee" font-size="13" text-anchor="middle">P4</text>
+      <line x1="120" y1="150" x2="120" y2="105" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="160.5" y1="165" x2="313.5" y2="165" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/><text x="241.0" y="160" fill="#9aa1ae" font-size="11" text-anchor="middle">1×1</text>
+      <circle cx="324.5" cy="165" r="9" fill="none" stroke="#e7e9ee" stroke-width="1.4"/><text x="324.5" y="170" fill="#e7e9ee" font-size="14" text-anchor="middle">+</text>
+      <line x1="334.5" y1="165" x2="349.5" y2="165" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <line x1="371.5" y1="104" x2="328.5" y2="155" stroke="#b28dff" stroke-width="1.6" marker-end="url(#fpA)"/><text x="332.0" y="131.5" fill="#b28dff" font-size="11">×2</text>
+      <line x1="430.5" y1="165" x2="487" y2="165" stroke="#f2b134" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <rect x="490" y="152" width="52" height="26" rx="5" fill="#f2b134" fill-opacity="0.2" stroke="#f2b134"/><text x="516" y="170" fill="#e7e9ee" font-size="12" text-anchor="middle">head</text>
+      <rect x="97.5" y="77" width="45" height="26" rx="3" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff"/><text x="120" y="95" fill="#e7e9ee" font-size="13" text-anchor="middle">C5</text>
+      <text x="89.5" y="95" fill="#9aa1ae" font-size="12" text-anchor="end">1/32</text>
+      <rect x="367.5" y="77" width="45" height="26" rx="3" fill="#b28dff" fill-opacity="0.3" stroke="#b28dff"/><text x="390" y="95" fill="#e7e9ee" font-size="13" text-anchor="middle">P5</text>
+      <line x1="145.5" y1="90" x2="364.5" y2="90" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#fpA)"/><text x="255.0" y="85" fill="#9aa1ae" font-size="11" text-anchor="middle">1×1</text>
+      <line x1="415.5" y1="90" x2="487" y2="90" stroke="#f2b134" stroke-width="1.6" marker-end="url(#fpA)"/>
+      <rect x="490" y="77" width="52" height="26" rx="5" fill="#f2b134" fill-opacity="0.2" stroke="#f2b134"/><text x="516" y="95" fill="#e7e9ee" font-size="12" text-anchor="middle">head</text>
+      <text x="548" y="335" fill="#5fd38d" font-size="12">small</text><text x="548" y="95" fill="#5fd38d" font-size="12">large</text>
+      <text x="300" y="375" fill="#9aa1ae" font-size="12" text-anchor="middle">the same head (anchors: class + offsets) on every level</text>
+      </svg>
+    </div>
+    <div style="font-size:0.8em">
+      <ul style="margin-top:0">
+        <li>one feature map cannot serve all sizes: deep maps are coarse (small objects vanish), shallow maps know little</li>
+        <li>FPN, a <b>feature pyramid network</b>: upsample the deeper map ×2 and <b>add</b> the shallow one: every level is fine <b>and</b> meaningful</li>
+        <li>each object is handled by the level that matches its size; the shape of a U-Net, with predictions at every level</li>
+      </ul>
+      <table class="tbl" style="font-size:0.88em; margin-top:0.3em">
+        <tr><th>level</th><th class="num">stride</th><th class="num">map</th><th class="num">anchor</th><th class="num">anchors</th></tr>
+        <tr><td>P2</td><td class="num">4</td><td class="num">160×336</td><td class="num">32</td><td class="num">161,280</td></tr><tr><td>P3</td><td class="num">8</td><td class="num">80×168</td><td class="num">64</td><td class="num">40,320</td></tr><tr><td>P4</td><td class="num">16</td><td class="num">40×84</td><td class="num">128</td><td class="num">10,080</td></tr><tr><td>P5</td><td class="num">32</td><td class="num">20×42</td><td class="num">256</td><td class="num">2,520</td></tr><tr><td>P6</td><td class="num">64</td><td class="num">10×21</td><td class="num">512</td><td class="num">630</td></tr>
+        <tr><td>all</td><td></td><td></td><td></td><td class="num"><b>214,830</b></td></tr>
+      </table>
+      <p class="small" style="margin-top:0.2em">Faster R-CNN on our crowd photo (resized to 1333×629), 3 aspect ratios per position; P6: P5 pooled.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Without anchors: every pixel predicts its box (FCOS, Tian et al., 2019)</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.15fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 400 330" style="width:100%; display:block; border-radius:6px; font-family: Inter, Arial, sans-serif">
+      <image href="../../assets/lecture07/crowd.jpg" x="-1000" y="-150" width="1920" height="906"/>
+      <rect x="66" y="72" width="208" height="524" fill="none" stroke="#f2b134" stroke-width="3"/>
+      <circle cx="150" cy="190" r="7" fill="#5fd38d"/>
+      <g stroke="#5fd38d" stroke-width="2.5">
+        <line x1="150" y1="190" x2="70" y2="190"/><line x1="150" y1="190" x2="270" y2="190"/><line x1="150" y1="190" x2="150" y2="76"/><line x1="150" y1="190" x2="150" y2="326"/>
+      </g>
+      <text x="105" y="183" fill="#5fd38d" font-size="19" font-weight="700" text-anchor="middle">l</text>
+      <text x="215" y="183" fill="#5fd38d" font-size="19" font-weight="700" text-anchor="middle">r</text>
+      <text x="160" y="125" fill="#5fd38d" font-size="19" font-weight="700">t</text>
+      <text x="160" y="265" fill="#5fd38d" font-size="19" font-weight="700">b ↓</text>
+    </svg>
+    <div style="font-size:0.84em">
+      <ul>
+        <li>every position of the feature map inside an object predicts: the class and the <b>distances to the four sides</b> $(l, t, r, b)$</li>
+        <li>no anchor sizes or shapes to choose, no matching of anchors to boxes</li>
+        <li>positions near the edge of an object give poor boxes: a third output, <b>centre-ness</b>, multiplies the score
+          $$\sqrt{\frac{\min(l, r)}{\max(l, r)}\cdot\frac{\min(t, b)}{\max(t, b)}}$$</li>
+        <li>still followed by NMS. Related: CornerNet (2018, two corners), CenterNet (2019, a heat map of object centres + the size)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Measuring a detector: average precision (AP)</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.1fr; gap:1.2em; align-items:center">
+    <svg viewBox="0 0 420 330" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+      <line x1="60" y1="280" x2="400" y2="280" stroke="#9aa1ae" stroke-width="1.5"/>
+      <line x1="60" y1="280" x2="60" y2="20" stroke="#9aa1ae" stroke-width="1.5"/>
+      <text x="230" y="315" fill="#9aa1ae" font-size="15" text-anchor="middle">recall = found / all true objects</text>
+      <text x="22" y="150" fill="#9aa1ae" font-size="15" text-anchor="middle" transform="rotate(-90 22 150)">precision = correct / reported</text>
+      <path d="M60,40 L120,40 L120,52 L180,52 L180,70 L230,70 L230,96 L280,96 L280,140 L320,140 L320,200 L345,200 L345,280 L60,280 Z" fill="#5ab0ff" fill-opacity="0.25" stroke="none"/>
+      <path d="M60,40 L120,40 L120,52 L180,52 L180,70 L230,70 L230,96 L280,96 L280,140 L320,140 L320,200 L345,200" fill="none" stroke="#5ab0ff" stroke-width="3"/>
+      <text x="200" y="210" fill="#5ab0ff" font-size="20" font-weight="600" text-anchor="middle">AP = area</text>
+      <text x="80" y="32" fill="#9aa1ae" font-size="13">high threshold</text>
+      <text x="352" y="232" fill="#9aa1ae" font-size="13" text-anchor="start">low threshold</text>
+    </svg>
+    <div style="font-size:0.84em">
+      <ul>
+        <li>sort all detections of a class by score; a detection is <b>correct</b> if IoU ≥ 0.5 with a true box not matched yet</li>
+        <li>lowering the score threshold: recall goes up, precision goes down; AP = area under this curve</li>
+        <li><b>mAP</b>: mean over classes. COCO “AP”: also the mean over IoU thresholds 0.5 … 0.95; AP<sub>50</sub> uses only 0.5</li>
+        <li>one number for the whole trade-off; a deployed system still needs one threshold</li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Schematic precision-recall curve.</p>
+</section>
+
+<section>
+  <h2>Detectors: what to remember</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; margin-top:0.4em">
+    <div class="box" style="text-align:center"><div class="small">SSDlite, 320×320 input</div><div style="font-size:1.9em; font-weight:700; color:var(--accent)">48 ms</div><div><b>4</b> detections on our crowd photo</div></div>
+    <div class="box" style="text-align:center"><div class="small">Faster R-CNN v2, ≈1333×629 input</div><div style="font-size:1.9em; font-weight:700; color:var(--accent)">1.8 s</div><div><b>37</b> detections</div></div>
+  </div>
+  <ol style="font-size:0.88em; margin-top:0.8em">
+    <li><b>Speed costs accuracy</b>, and the input size and the backbone decide most of it: small objects need resolution.</li>
+    <li><b>One-stage vs two-stage is no longer the deciding factor</b>: the training recipe matters as much (Faster R-CNN v1 → v2: +10 AP, same backbone), and today's real-time YOLOs are one-stage and as accurate.</li>
+    <li><b>Choose by the deployment</b>: real time on a phone, car or drone → a one-stage detector; best accuracy, masks → two-stage or transformer (DETR family).</li>
+  </ol>
+  <p class="credit">Our CPU run on the crowd photo (16 threads, score ≥ 0.5), <code>experiments/detection.py</code>; the full table of 7 torchvision detectors is in <code>assets/lecture07/data/detectors.json</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 3</div>
+  <h1>Both at once, and beyond</h1>
+  <p style="color:var(--fg-dim); margin:0.5em 0 0">A quick overview, not in depth: more in the <b>Visual Recognition</b> course.</p>
+</section>
+
+<section>
+  <h2>Instance segmentation: Mask R-CNN (He et al., 2017)</h2>
+  <div class="cols" style="grid-template-columns: 1.25fr 1fr; gap:1.0em; align-items:start">
+    <div data-widget="detview" data-config='{"src":"../../assets/lecture07/crowd.jpg","data":"../../assets/lecture07/data/crowd_maskrcnn.json","task":"masks","minScore":0.9,"width":620}'></div>
+    <div style="font-size:0.84em">
+      <ul style="margin-top:0">
+        <li>Faster R-CNN + a third output per proposal: a <b>mask</b></li>
+        <li>detection decides <b>which</b> object, segmentation decides <b>which pixels</b></li>
+        <li>RoIAlign was introduced here: masks need pixel-accurate crops</li>
+      </ul>
+    </div>
+  </div>
+  <svg viewBox="0 0 1180 240" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+    <defs><marker id="mkA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+    <image href="../../assets/lecture07/crowd.jpg" x="10" y="40" width="230" height="108.5"/>
+    <rect x="136.9" y="66.2" width="27.2" height="64.2" fill="none" stroke="#f2b134" stroke-width="2.5"/>
+    <text x="125" y="30" fill="#9aa1ae" font-size="13" text-anchor="middle">one proposal</text>
+    <line x1="245" y1="95" x2="275" y2="95" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <rect x="280" y="62" width="210" height="66" rx="8" fill="#1e2128" stroke="#9aa1ae"/>
+    <text x="385" y="90" fill="#e7e9ee" font-size="15" text-anchor="middle">backbone + RPN + RoIAlign</text>
+    <text x="385" y="112" fill="#9aa1ae" font-size="13" text-anchor="middle">as in Faster R-CNN</text>
+    <line x1="492" y1="88" x2="540" y2="50" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <line x1="492" y1="104" x2="540" y2="172" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <rect x="545" y="24" width="130" height="48" rx="6" fill="#b28dff" fill-opacity="0.25" stroke="#b28dff"/>
+    <text x="610" y="53" fill="#e7e9ee" font-size="15" text-anchor="middle">box head</text>
+    <line x1="680" y1="48" x2="715" y2="48" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <text x="722" y="43" fill="#e7e9ee" font-size="15">person 0.999</text><text x="722" y="63" fill="#9aa1ae" font-size="13">+ refined box</text>
+    <rect x="530" y="118" width="645" height="118" rx="10" fill="none" stroke="#f2b134" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="1165" y="137" fill="#f2b134" font-size="14" font-weight="600" text-anchor="end">new in Mask R-CNN</text>
+    <rect x="545" y="148" width="150" height="56" rx="6" fill="#5fd38d" fill-opacity="0.2" stroke="#5fd38d"/>
+    <text x="620" y="172" fill="#e7e9ee" font-size="15" text-anchor="middle">mask head</text>
+    <text x="620" y="192" fill="#9aa1ae" font-size="12" text-anchor="middle">small conv net, ×2 up</text>
+    <line x1="700" y1="176" x2="735" y2="176" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <rect x="740" y="141" width="70" height="70" fill="#111"/>
+    <image href="../../assets/lecture07/data/mask28_vis.png" x="740" y="141" width="70" height="70" style="image-rendering:pixelated"/>
+    <text x="775" y="228" fill="#e7e9ee" font-size="12" text-anchor="middle">28×28 mask</text>
+    <line x1="816" y1="176" x2="905" y2="176" stroke="#9aa1ae" stroke-width="2" marker-end="url(#mkA)"/>
+    <text x="860" y="168" fill="#9aa1ae" font-size="12" text-anchor="middle">resize into</text><text x="860" y="196" fill="#9aa1ae" font-size="12" text-anchor="middle">the box</text>
+    <svg x="910" y="126" width="60.3" height="100" viewBox="500 99 174 288">
+      <image href="../../assets/lecture07/crowd.jpg" x="0" y="0" width="960" height="453"/>
+      <image href="../../assets/lecture07/data/mask_box.png" x="529.5" y="109.4" width="113.7" height="268.1"/>
+      <rect x="529.5" y="109.4" width="113.7" height="268.1" fill="none" stroke="#f2b134" stroke-width="3"/>
+    </svg>
+    <text x="1000" y="190" fill="#e7e9ee" font-size="13">which pixels</text><text x="1000" y="207" fill="#e7e9ee" font-size="13">of the box</text>
+  </svg>
+  <p class="credit">Our run: torchvision Mask R-CNN v2, score ≥ 0.9, <code>experiments/detection.py</code>; the 28×28 mask: the raw output of its mask head, <code>experiments/mask_head.py</code>.</p>
+</section>
+
+<section>
+  <h2>A class not seen in training is not recognized</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.0em; align-items:start">
+    <div>
+      <div data-widget="detview" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_maskrcnn.json","task":"instance","minScore":0.6,"noMask":["dining table"],"width":500,"tagSize":12}'></div>
+      <p style="font-size:0.74em; margin:0.2em 0 0">Mask R-CNN was trained on COCO: 80 classes, apples and bananas but <b>no pears</b>. It never learned what a pear is.</p>
+    </div>
+    <div style="font-size:0.8em">
+      <svg viewBox="0 0 520 190" style="width:92%; display:block; font-family: Inter, Arial, sans-serif">
+        <defs><marker id="kc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+        <rect x="0" y="62" width="80" height="60" rx="6" fill="#5ab0ff" fill-opacity="0.2" stroke="#5ab0ff"/>
+        <text x="40" y="88" fill="#e7e9ee" font-size="14" text-anchor="middle">features</text><text x="40" y="106" fill="#9aa1ae" font-size="12" text-anchor="middle">of one box</text>
+        <line x1="84" y1="92" x2="124" y2="92" stroke="#9aa1ae" stroke-width="2" marker-end="url(#kc)"/>
+        <rect x="128" y="62" width="90" height="60" rx="6" fill="#f2b134" fill-opacity="0.2" stroke="#f2b134"/>
+        <text x="173" y="88" fill="#e7e9ee" font-size="14" text-anchor="middle">linear</text><text x="173" y="106" fill="#9aa1ae" font-size="12" text-anchor="middle">→ 91 numbers</text>
+        <line x1="222" y1="92" x2="262" y2="92" stroke="#9aa1ae" stroke-width="2" marker-end="url(#kc)"/>
+        <text x="300" y="97" fill="#e7e9ee" font-size="14" text-anchor="middle">softmax</text>
+        <line x1="338" y1="92" x2="368" y2="92" stroke="#9aa1ae" stroke-width="2" marker-end="url(#kc)"/>
+        <g font-size="13" fill="#e7e9ee">
+          <text x="376" y="22">background</text><text x="376" y="42">person</text><text x="376" y="62">…</text>
+          <text x="376" y="82">banana</text><text x="376" y="102">apple</text><text x="376" y="122">orange</text><text x="376" y="142">…</text><text x="376" y="162">toothbrush</text>
+        </g>
+        <rect x="372" y="168" width="110" height="20" rx="4" fill="none" stroke="#ff6b6b" stroke-dasharray="5 3"/>
+        <text x="427" y="183" fill="#ff6b6b" font-size="13" text-anchor="middle">pear: no output</text>
+      </svg>
+      <ul style="margin-top:0.1em; font-size:0.95em">
+        <li>the last layer has one output per class it was trained on (COCO: 80 + background); there is <b>no output for “pear”</b></li>
+        <li>the softmax still has to share 1.0: a pear's probability goes to <b>look-alikes</b> (apple, banana) or to <b>background</b>, and then it is not detected at all</li>
+      </ul>
+    </div>
+  </div>
+  <p class="small" style="margin:0.2em 0 0">The same network, given the true box of each fruit: its softmax (top 3).</p>
+  <div class="cols" style="grid-template-columns: repeat(4, 1fr); gap:1em"><div><svg viewBox="0 0 300 100" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><text x="0" y="16" fill="#e7e9ee" font-size="16" font-weight="700">pear 1</text><text x="0" y="44" fill="#e7e9ee" font-size="14">apple</text><rect x="86" y="32" width="62" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="153" y="44" fill="#e7e9ee" font-size="13">0.52</text><text x="0" y="68" fill="#e7e9ee" font-size="14">banana</text><rect x="86" y="56" width="46" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="137" y="68" fill="#e7e9ee" font-size="13">0.39</text><text x="0" y="92" fill="#e7e9ee" font-size="14">background</text><rect x="86" y="80" width="10" height="15" fill="#9aa1ae" fill-opacity="0.8"/><text x="101" y="92" fill="#e7e9ee" font-size="13">0.08</text></svg></div><div><svg viewBox="0 0 300 100" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><text x="0" y="16" fill="#e7e9ee" font-size="16" font-weight="700">pear 2</text><text x="0" y="44" fill="#e7e9ee" font-size="14">apple</text><rect x="86" y="32" width="66" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="157" y="44" fill="#e7e9ee" font-size="13">0.55</text><text x="0" y="68" fill="#e7e9ee" font-size="14">background</text><rect x="86" y="56" width="54" height="15" fill="#9aa1ae" fill-opacity="0.8"/><text x="145" y="68" fill="#e7e9ee" font-size="13">0.44</text><text x="0" y="92" fill="#e7e9ee" font-size="14">orange</text><rect x="86" y="80" width="2" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="93" y="92" fill="#e7e9ee" font-size="13">0.00</text></svg></div><div><svg viewBox="0 0 300 100" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><text x="0" y="16" fill="#e7e9ee" font-size="16" font-weight="700">pear 3</text><text x="0" y="44" fill="#e7e9ee" font-size="14">background</text><rect x="86" y="32" width="92" height="15" fill="#9aa1ae" fill-opacity="0.8"/><text x="183" y="44" fill="#e7e9ee" font-size="13">0.77</text><text x="0" y="68" fill="#e7e9ee" font-size="14">apple</text><rect x="86" y="56" width="26" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="117" y="68" fill="#e7e9ee" font-size="13">0.21</text><text x="0" y="92" fill="#e7e9ee" font-size="14">banana</text><rect x="86" y="80" width="2" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="93" y="92" fill="#e7e9ee" font-size="13">0.01</text></svg></div><div><svg viewBox="0 0 300 100" style="width:100%; display:block; font-family: Inter, Arial, sans-serif"><text x="0" y="16" fill="#e7e9ee" font-size="16" font-weight="700">apple</text><text x="0" y="44" fill="#e7e9ee" font-size="14">apple</text><rect x="86" y="32" width="118" height="15" fill="#5fd38d" fill-opacity="0.8"/><text x="209" y="44" fill="#e7e9ee" font-size="13">0.99</text><text x="0" y="68" fill="#e7e9ee" font-size="14">background</text><rect x="86" y="56" width="2" height="15" fill="#9aa1ae" fill-opacity="0.8"/><text x="93" y="68" fill="#e7e9ee" font-size="13">0.01</text><text x="0" y="92" fill="#e7e9ee" font-size="14">orange</text><rect x="86" y="80" width="2" height="15" fill="#f2b134" fill-opacity="0.8"/><text x="93" y="92" fill="#e7e9ee" font-size="13">0.00</text></svg></div></div>
+  <div class="takeaway" style="font-size:0.92em; margin-top:0.3em">A new class needs a new output, labelled data and fine-tuning. <b>Can we separate the objects first, and name them later (or never)?</b></div>
+  <p class="credit">Our runs: torchvision Mask R-CNN v2 (COCO), detections with score ≥ 0.6 (<code>experiments/detection.py</code>); softmax on the true boxes (<code>experiments/pear_softmax.py</code>).</p>
+</section>
+
+<section>
+  <h2>Segment Anything (Kirillov et al., 2023): click, get a mask</h2>
+  <div class="cols" style="grid-template-columns: 1.35fr 1fr; gap:1.0em; align-items:start">
+    <div data-widget="samclick" data-config='{"src":"../../assets/lecture07/pears.jpg","data":"../../assets/lecture07/data/pears_sam.json","width":660,"x":396,"y":324}'></div>
+    <div style="font-size:0.84em">
+      <ul>
+        <li>input: the image + a <b>prompt</b>: a click, a box, or a rough mask</li>
+        <li>output: a mask, <b>no class</b>; works for objects never named in training (the pears)</li>
+        <li>one click is ambiguous (a stalk, a pear, all the fruit?): SAM returns <b>3 masks</b> (below, from small to large) and its own estimate of their IoU</li>
+        <li>click anywhere on the photo: the table, a stalk, the shadow</li>
+      </ul>
+    </div>
+  </div>
+  <p class="credit">Our run: SAM ViT-B, precomputed for a 24-px grid of clicks, <code>experiments/sam_points.py</code>.</p>
+</section>
+
+<section class="optional">
+  <h2>SAM: a heavy encoder once, a light decoder per click <span class="optional-badge">optional</span></h2>
+  <svg viewBox="0 0 1180 250" style="width:100%; display:block; font-family: Inter, Arial, sans-serif">
+    <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+    <image href="../../assets/lecture07/pears.jpg" x="10" y="60" width="200" height="113"/>
+    <line x1="215" y1="117" x2="255" y2="117" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a4)"/>
+    <polygon points="260,55 420,85 420,150 260,180" fill="#5ab0ff" fill-opacity="0.25" stroke="#5ab0ff" stroke-width="1.5"/>
+    <text x="335" y="112" fill="#e7e9ee" font-size="16" text-anchor="middle">image encoder</text>
+    <text x="335" y="132" fill="#9aa1ae" font-size="13" text-anchor="middle">ViT (lectures 9, 10)</text>
+    <text x="340" y="215" fill="#5ab0ff" font-size="15" text-anchor="middle">once per image: 5.2 s</text>
+    <line x1="425" y1="117" x2="470" y2="117" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a4)"/>
+    <g fill="#5ab0ff" fill-opacity="0.18" stroke="#5ab0ff"><rect x="480" y="75" width="80" height="80"/><rect x="488" y="68" width="80" height="80"/><rect x="496" y="61" width="80" height="80"/></g>
+    <text x="530" y="185" fill="#e7e9ee" font-size="14" text-anchor="middle">embedding 64×64×256</text>
+    <line x1="585" y1="110" x2="680" y2="110" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a4)"/>
+    <rect x="580" y="20" width="110" height="40" rx="8" fill="#1e2128" stroke="#5fd38d"/>
+    <text x="635" y="45" fill="#5fd38d" font-size="14" text-anchor="middle">prompt: click</text>
+    <line x1="660" y1="62" x2="700" y2="90" stroke="#5fd38d" stroke-width="2" marker-end="url(#a4)"/>
+    <polygon points="690,80 800,92 800,135 690,147" fill="#f2b134" fill-opacity="0.25" stroke="#f2b134" stroke-width="1.5"/>
+    <text x="745" y="112" fill="#e7e9ee" font-size="14" text-anchor="middle">mask decoder</text>
+    <text x="745" y="185" fill="#f2b134" font-size="15" text-anchor="middle">per click: 37 ms</text>
+    <line x1="805" y1="112" x2="850" y2="112" stroke="#9aa1ae" stroke-width="2" marker-end="url(#a4)"/>
+    <text x="860" y="95" fill="#e7e9ee" font-size="15">3 masks</text>
+    <text x="860" y="120" fill="#e7e9ee" font-size="15">+ predicted IoU of each</text>
+  </svg>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.84em">
+    <ul>
+      <li>interactive: encode once, then every click costs milliseconds (the decoder even runs in a web browser)</li>
+      <li>times: our CPU run of the smallest model (ViT-B); the paper's ViT-H is ~7× larger</li>
+    </ul>
+    <ul>
+      <li>data: <b>SA-1B</b>, 11 M images, 1.1 B masks, built by a <b>data engine</b>: annotators correct SAM's masks → retrain → SAM proposes masks → … → finally fully automatic</li>
+      <li>the model labelled most of its own training data</li>
+    </ul>
+  </div>
+  <p class="credit">Times: SAM ViT-B on our CPU (16 threads), <code>experiments/sam_points.py</code>.</p>
+</section>
+
+<section class="optional">
+  <h2>What else SAM can be asked <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: repeat(4, 1fr); gap:0.6em; align-items:start; font-size:0.72em">
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/sam_modes.json","panel":"everything","width":285}'></div><p style="margin:0.3em 0 0"><b>no prompt</b>: a 32×32 grid of clicks, keep the confident masks: <b>170 masks</b> (55 s on our CPU)</p></div>
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/sam_modes.json","panel":"box","width":285}'></div><p style="margin:0.3em 0 0"><b>a box</b> (dashed) → the object inside it</p></div>
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/sam_modes.json","panel":"clicks","width":285}'></div><p style="margin:0.3em 0 0"><b>several clicks</b>: + on two pears, − on the apple → one mask for both pears</p></div>
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/sam_modes.json","panel":"part","width":285,"crop":[300,95,250,165]}'></div><p style="margin:0.3em 0 0"><b>a click on a pear's stalk</b> (zoomed) → only the stalk (SAM's most confident of its 3 masks, 0.93). A click on the body gives the whole pear: SAM segments <b>parts</b> as well as objects</p></div>
+  </div>
+  <div class="takeaway" style="font-size:0.84em; margin-top:0.8em">One model, no classes, no fine-tuning: annotation tools, photo editing (“select subject”), medical and satellite images, robotics. SAM 2 does the same in <b>video</b>: click once, the mask follows the object.</div>
+  <p class="credit">Our runs: SAM ViT-B on CPU, <code>experiments/sam_modes.py</code>.</p>
+</section>
+
+<section class="optional">
+  <h2>Open vocabulary: the classes are text <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr 1fr; gap:0.8em; align-items:start; font-size:0.74em">
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/open_vocab.json","panel":"pears","width":380}'></div><p style="margin:0.3em 0 0">Mask R-CNN called the first pear a “banana” (COCO has no pears). Text → boxes (OWLv2) → masks (SAM, the boxes as prompts).</p></div>
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/open_vocab.json","panel":"crowd","width":380}'></div><p style="margin:0.3em 0 0">Not just class names: “a man in a floral shirt” picks one person out of the crowd.</p></div>
+    <div><div data-widget="promptview" data-config='{"data":"../../assets/lecture07/data/open_vocab.json","panel":"street","width":380}'></div><p style="margin:0.3em 0 0">The tiny crane in the sky and the hotel sign: no COCO class for either.</p></div>
+  </div>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1em; font-size:0.78em; margin-top:0.4em">
+    <ul style="margin:0"><li>each box gets an <b>embedding</b>; the query text gets one from a text encoder; score = their similarity (instead of a softmax over fixed classes)</li></ul>
+    <ul style="margin:0"><li>trained on image–caption pairs from the web (as CLIP) + detection data; a new class = a new sentence, no retraining</li></ul>
+  </div>
+  <p class="credit">Our runs: OWLv2 base/16 (Minderer et al., 2023) + SAM ViT-B on CPU, numbers = OWLv2 scores, <code>experiments/open_vocab.py</code>.</p>
+</section>
+
+<section>
+  <h2>Detection and segmentation today</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.0em; font-size:0.82em">
+    <div class="box">
+      <h3>DETR (Carion et al., 2020)</h3>
+      <p>A transformer outputs a <b>set</b> of 100 (class, box) pairs; training matches them one-to-one with the true boxes (Hungarian matching), extra outputs learn “no object”. No anchors, <b>no NMS</b>. Lectures 9 and 10.</p>
+    </div>
+    <div class="box">
+      <h3>open vocabulary</h3>
+      <p>Detect classes given as text: “pear”, “person with an umbrella” (OWL-ViT 2022, Grounding DINO 2023). The class head compares box features with text embeddings instead of a fixed softmax.</p>
+    </div>
+    <div class="box">
+      <h3>SAM 2 (2024), SAM 3 (2025)</h3>
+      <p>SAM 2: video, a mask is tracked through the frames. SAM 3: <b>concept</b> prompts, “yellow school bus” or an example box, and it finds and segments all instances.</p>
+    </div>
+    <div class="box">
+      <h3>still convnets</h3>
+      <p>Real-time detection on phones, cars and drones: YOLO-style one-stage detectors. Medical segmentation: U-Net variants. Most backbones above: ResNets, ConvNeXts or ViTs.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Summary</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; font-size:0.88em">
+    <div>
+      <h3>segmentation: a class per pixel</h3>
+      <ul>
+        <li>encoder (pretrained classifier) down, decoder up</li>
+        <li>learnable upsampling: <b>transposed convolution</b> = $M^\top$; uneven overlap → checkerboards; or resize + conv</li>
+        <li><b>U-Net</b>: skip connections at every level; the default</li>
+        <li>loss: per-pixel cross-entropy (or Dice); metric: mean IoU</li>
+      </ul>
+    </div>
+    <div>
+      <h3>detection: a box per object</h3>
+      <ul>
+        <li>unknown number of objects → predict for a fixed set of <b>anchors</b> (or every position) + <b>NMS</b></li>
+        <li>one-stage: grid + anchors in one pass (YOLO, SSD, RetinaNet + focal loss)</li>
+        <li>two-stage: proposals → RoIAlign → classify and refine (Faster R-CNN); + masks = Mask R-CNN</li>
+        <li>metric: AP at IoU thresholds</li>
+        <li>SAM: masks without classes, from a click</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Next</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap:1.2em; margin-top:0.6em">
+    <div class="box"><h3>Lecture 8 (Wed, Nov 25)</h3><p>Recurrent neural networks: sequences of any length.</p></div>
+  </div>
+</section>
+
+<section id="feedback" class="title-slide">
+  <h1>Feedback</h1>
+  <div style="display:flex; align-items:center; gap:1.5em; margin-top:0.5em">
+    <img src="../../assets/feedback-qr.svg" alt="QR code linking to tinyurl.com/mimuw-dnn-feedback" style="width:340px; height:340px; box-sizing:content-box; padding:18px; background:#fff; border-radius:8px; margin:0">
+    <div>
+      <p>Please spend a minute: your feedback helps me improve the next lecture.</p>
+      <p style="font-family:var(--mono); font-size:1.1em"><a href="https://tinyurl.com/mimuw-dnn-feedback">tinyurl.com/mimuw-dnn-feedback</a></p>
+      <p class="small">Anonymous, no login, three questions.</p>
+    </div>
+  </div>
+</section>
+
+</div></div>
+<script type="module" src="../../shared/deck.js"></script>
+</body>
+</html>

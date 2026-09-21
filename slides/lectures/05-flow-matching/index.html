@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lecture 5: Flow matching</title>
+  <link rel="stylesheet" href="../../vendor/reveal/reset.css">
+  <link rel="stylesheet" href="../../vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="../../vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="../../shared/deck.css">
+  <script src="../../vendor/katex/katex.min.js"></script>
+  <script src="../../vendor/katex/contrib/auto-render.min.js"></script>
+  <style>
+    .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:0.8em; margin-top:0.6em; }
+    .cards .box { text-align:center; font-size:0.7em; padding:0.6em 0.7em; }
+    .cards .box h3 { margin-bottom:0.2em; }
+    .cards svg { width:100%; height:110px; display:block; margin:0 auto 0.4em; }
+    .cards .sys { color: var(--fg); }
+    .pichain [data-pi] { padding:0.1em 0.7em; border-radius:10px; border:2px solid transparent; transition:background 0.15s, border-color 0.15s; }
+    .pichain [data-pi].on { border-color:var(--accent); background:rgba(242,177,52,0.14); }
+    .formula-big { font-size:1.15em; text-align:center; margin:0.3em 0; }
+    pre.algo { font-size:0.62em; background:var(--bg-2); padding:0.6em 0.9em; border-radius:8px; border:1px solid var(--line); margin:0; line-height:1.5; }
+    pre.algo code { background:none; padding:0; font-size:1em; }
+    .photos { display:grid; grid-template-columns: repeat(3, 1fr); gap:0.6em; margin-top:0.3em; }
+    .photos img { width:100%; border-radius:8px; margin:0; display:block; }
+    .photos figcaption { font-size:0.6em; color: var(--fg-dim); margin-top:0.25em; }
+    .photos figure { margin:0; }
+    .coin { display:inline-flex; align-items:center; justify-content:center; width:1.5em; height:1.5em; border-radius:50%; font-weight:700; font-size:0.9em; margin-right:0.25em; color:#15171c; background:#9aa1ae; }
+    .coin.h { background:#f2b134; }
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============================================================ -->
+<section class="title-slide">
+  <h1>Lecture 5<br>Flow matching</h1>
+  <p class="subtitle">Deep Neural Networks · University of Warsaw · 2026/27 · Mateusz Wyszyński</p>
+  <p class="small interactive-only" style="margin-top:1.5em"><a href="../../pdf/05-flow-matching.pdf">PDF version</a> (light, for printing)</p>
+</section>
+
+<section>
+  <h2>Motivation</h2>
+  <div class="cols" style="grid-template-columns:1.05fr 1fr; gap:1.2em; align-items:start">
+    <div class="box">
+      <h3>Generative AI</h3>
+      <!-- gen-robots.jpg was generated locally with Z-Image-Turbo (mflux) from exactly this prompt, seed 42; see assets/CREDITS.md -->
+      <div data-widget="genimg" data-config='{"image":"../../assets/lecture05/gen-robots.jpg","prompt":"two black robot arms on a wooden table folding a cardboard box, bright university robotics lab, photorealistic","width":480,"height":270,"t":0,"print_t":1}'></div>
+    </div>
+    <div>
+    <div class="box fragment" data-fragment-index="0">
+      <h3>Today's framework: generation = sampling from a distribution</h3>
+      <p style="margin:0.2em 0">$$z \sim q$$</p>
+      <svg viewBox="0 0 420 170" style="width:100%; max-width:420px; display:block; margin:0 auto; font-family:Inter, Arial"><defs><marker id="gia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="10" y="10" width="190" height="150" rx="8" fill="#1e2128" stroke="#3a3f4b"/><circle cx="93.7" cy="102.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="95.6" cy="105.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="127.2" cy="96.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="115.3" cy="69.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="160.5" cy="103.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="100.6" cy="60.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="102.8" cy="54.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.2" cy="92.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="49.7" cy="68.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="104.1" cy="115.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="130.4" cy="115.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="171.9" cy="86.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="83.6" cy="88.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="120.4" cy="71.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="165.3" cy="99.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="102.0" cy="106.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="155.5" cy="113.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="69.9" cy="50.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="117.7" cy="73.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="121.4" cy="74.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="152.4" cy="103.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="130.9" cy="108.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="132.6" cy="115.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="130.7" cy="121.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="40.6" cy="79.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="86.7" cy="61.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="162.0" cy="106.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="40.8" cy="86.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="120.1" cy="70.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="86.5" cy="86.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="160.0" cy="105.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="51.7" cy="60.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="172.1" cy="85.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="116.5" cy="112.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="128.0" cy="101.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="164.3" cy="97.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.5" cy="94.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="157.9" cy="106.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="171.2" cy="85.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.8" cy="91.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="93.3" cy="102.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="106.6" cy="106.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="158.9" cy="100.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="76.8" cy="54.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="82.9" cy="53.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="72.5" cy="58.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="107.7" cy="109.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="60.4" cy="51.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="37.1" cy="91.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="114.1" cy="110.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="61.4" cy="58.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="172.9" cy="79.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="95.0" cy="103.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="112.9" cy="67.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="39.6" cy="83.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="47.6" cy="68.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="105.1" cy="64.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="148.5" cy="113.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="125.2" cy="81.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="92.7" cy="99.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="120.5" cy="78.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="89.5" cy="93.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="68.9" cy="56.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="124.0" cy="115.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="119.0" cy="71.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="90.5" cy="98.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.6" cy="95.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="109.2" cy="114.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="56.5" cy="58.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="113.6" cy="117.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="174.0" cy="73.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="78.6" cy="56.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="165.8" cy="93.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="61.6" cy="56.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="118.5" cy="114.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="91.4" cy="100.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="127.4" cy="91.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="122.4" cy="115.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="152.3" cy="110.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="86.5" cy="92.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="83.2" cy="81.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="90.2" cy="100.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="40.3" cy="79.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="125.3" cy="87.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="126.6" cy="85.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="101.0" cy="105.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="139.1" cy="117.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="48.8" cy="63.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="166.8" cy="96.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="146.1" cy="116.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="68.3" cy="52.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="46.3" cy="69.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="87.8" cy="52.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="95.7" cy="52.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="127.8" cy="92.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="127.2" cy="86.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="89.5" cy="53.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="95.8" cy="56.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="173.8" cy="74.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="85.7" cy="51.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="64.7" cy="55.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="51.8" cy="63.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="45.8" cy="67.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="114.5" cy="67.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="89.6" cy="97.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="103.1" cy="108.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="68.9" cy="53.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="121.6" cy="75.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="173.3" cy="77.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.2" cy="96.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="90.5" cy="97.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="154.5" cy="109.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.6" cy="92.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="125.0" cy="76.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="150.9" cy="109.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="96.5" cy="105.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="88.0" cy="91.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="94.2" cy="56.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="46.6" cy="69.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="98.6" cy="104.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="53.7" cy="64.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="53.7" cy="62.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="132.8" cy="117.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="161.8" cy="103.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="108.1" cy="110.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="84.4" cy="88.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="105.0" cy="55.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.4" cy="90.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="72.1" cy="49.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="115.5" cy="64.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="168.8" cy="92.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="162.5" cy="101.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="163.4" cy="105.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="113.2" cy="111.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="76.9" cy="52.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="42.7" cy="73.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="173.9" cy="72.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="126.3" cy="79.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="163.2" cy="104.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="94.3" cy="105.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="149.4" cy="113.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="88.0" cy="93.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="43.6" cy="77.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="51.8" cy="65.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="103.4" cy="54.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="51.0" cy="62.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="107.3" cy="111.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.0" cy="95.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="91.9" cy="53.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="83.1" cy="79.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="85.5" cy="94.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="76.8" cy="58.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="82.6" cy="74.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="47.2" cy="70.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="82.0" cy="73.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="120.5" cy="65.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="52.4" cy="68.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="173.6" cy="77.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="111.8" cy="66.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="49.8" cy="61.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="125.6" cy="85.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="168.8" cy="91.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="100.9" cy="101.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="99.9" cy="57.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="107.6" cy="64.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="147.6" cy="113.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="110.7" cy="58.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="109.3" cy="65.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="44.2" cy="69.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="76.8" cy="50.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="127.4" cy="91.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="82.1" cy="78.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.1" cy="95.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="91.7" cy="53.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="173.4" cy="76.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="160.8" cy="101.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="93.7" cy="50.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="110.1" cy="112.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="83.7" cy="83.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="94.6" cy="101.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="126.7" cy="119.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="121.7" cy="76.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="108.0" cy="109.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="105.1" cy="113.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="89.6" cy="100.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="121.5" cy="73.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="102.9" cy="113.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="102.6" cy="58.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="44.5" cy="70.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="153.3" cy="110.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="140.6" cy="111.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="66.1" cy="62.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="117.3" cy="118.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="99.9" cy="107.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="171.6" cy="88.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="84.4" cy="83.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="62.0" cy="55.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="144.5" cy="115.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="107.1" cy="52.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="107.0" cy="62.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="111.1" cy="63.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="126.6" cy="77.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="119.2" cy="77.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="87.8" cy="94.5" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="43.3" cy="75.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="126.9" cy="80.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="84.5" cy="53.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="161.9" cy="102.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="169.4" cy="86.6" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="104.0" cy="100.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="123.5" cy="78.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="166.1" cy="99.2" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="39.5" cy="77.0" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="98.6" cy="56.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="143.6" cy="114.8" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="123.3" cy="76.7" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="148.6" cy="110.3" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="82.8" cy="78.9" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.1" cy="101.1" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="130.2" cy="110.4" r="2.2" fill="rgba(242,177,52,0.55)"/><circle cx="36.2" cy="92.9" r="6" fill="none" stroke="#e7e9ee" stroke-width="2"/><line x1="215" y1="85" x2="262" y2="85" stroke="#9aa1ae" stroke-width="2" marker-end="url(#gia)"/><rect x="270" y="40" width="130" height="90" rx="6" fill="#3b6fb6"/><circle cx="305" cy="68" r="10" fill="#ffd34d"/><path d="M270 125 L312 85 L336 108 L356 92 L400 125 Z" fill="#2f6b2a"/><rect x="270" y="122" width="130" height="8" fill="#6b4226"/><text x="335" y="152" fill="#9aa1ae" font-size="14" text-anchor="middle">a new sample</text></svg>
+      <p class="small" style="margin:0.4em 0 0">$q : \mathbb R^d \to \mathbb R_{\ge 0}$ — we do not know this density, but we have samples of it</p>
+    </div>
+    <div class="takeaway fragment" data-fragment-index="0" style="margin-top:0.7em">Hence in the end we do not necessarily need to <em>know</em> the distribution. We need to be able to <b>sample</b> from it!</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>The goal and general idea</h2>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.55em 0.7em; margin-top:0.2em">
+    <div class="box"><h3 style="font-size:0.72em; margin-bottom:0.3em">We can easily sample from known distributions</h3><div data-widget="gauss1d" data-config='{"width":534,"height":190,"controls":"overlay","t":0,"print_t":1}'></div></div>
+    <div class="box"><h3 style="font-size:0.72em; margin-bottom:0.3em">Deformable simulations: studied for decades</h3><div data-widget="melt" data-config='{"panel":"ice","width":534,"height":190,"controls":"overlay","t":0,"print_t":0.6}'></div></div>
+    <div class="box" style="grid-column:1 / -1"><h3 style="font-size:0.72em; margin-bottom:0.3em">Combine the two ideas to generate samples from the distribution of interest</h3><div data-widget="melt" data-config='{"panel":"density","width":900,"height":280,"samples":200,"controls":"overlay","t":0,"print_t":0.6}' style="width:900px; margin:0 auto"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Overview</h2>
+  <div class="cols" style="grid-template-columns:repeat(3,1fr); gap:0.9em; font-size:0.78em; margin-top:0.4em">
+    <div class="box" style="position:relative"><h3>1 · preliminaries</h3><p class="small" style="font-size:0.8em; margin:0">deformation, probability</p><div class="sel fragment fade-out" data-fragment-index="1"></div></div>
+    <div class="box" style="position:relative"><h3>2 · learning deformation</h3><p class="small" style="font-size:0.8em; margin:0">likelihood, residual flows, flow matching</p><div class="sel fragment fade-in-then-out" data-fragment-index="1"></div></div>
+    <div class="box" style="position:relative"><h3>3 · extensions, applications & discussion</h3><p class="small" style="font-size:0.8em; margin:0">diffusion, conditioning, physical AI</p><div class="sel fragment fade-in" data-fragment-index="2"></div></div>
+  </div>
+  <!-- walkthrough: the three states share one grid cell; each state = a frame around its block + a visualisation -->
+  <div style="display:grid; justify-items:center; align-items:start; margin-top:0.9em">
+    <div class="fragment fade-out" data-fragment-index="1" style="grid-area:1/1">
+      <div data-widget="jacdet" data-config='{"width":560,"height":370,"tau":0,"loop":true,"print_tau":1}'></div>
+    </div>
+    <div class="fragment fade-in-then-out" data-fragment-index="1" style="grid-area:1/1">
+      <div data-widget="flowrows" data-config='{"source":"gauss8","target":"moons","size":400,"layout":"row","gap":24,"panels":2,"t":0,"print_t":0.6}'></div>
+    </div>
+    <div class="fragment fade-in" data-fragment-index="2" style="grid-area:1/1; width:100%">
+    <div class="cards" style="margin-top:0">
+      <div class="box"><svg viewBox="0 0 120 80"><rect x="4" y="4" width="112" height="72" rx="6" fill="#3b6fb6"/><circle cx="34" cy="28" r="9" fill="#ffd34d"/><path d="M4 72 L42 38 L62 58 L82 44 L116 72 Z" fill="#2f6b2a"/><rect x="4" y="70" width="112" height="6" fill="#6b4226"/></svg><h3>images &amp; video</h3><span class="sys">Stable Diffusion 3, Flux (flow matching); Sora, Veo (diffusion)</span><br></div>
+      <div class="box"><svg viewBox="0 0 96 64"><rect x="2" y="54" width="92" height="8" fill="#5a4630"/><rect x="10" y="46" width="16" height="8" fill="#5a606c"/><line x1="18" y1="46" x2="34" y2="16" stroke="#c9ccd4" stroke-width="5" stroke-linecap="round"/><line x1="34" y1="16" x2="64" y2="24" stroke="#c9ccd4" stroke-width="5" stroke-linecap="round"/><circle cx="18" cy="46" r="3.5" fill="#b28dff"/><circle cx="34" cy="16" r="3.5" fill="#b28dff"/><circle cx="64" cy="24" r="3.5" fill="#b28dff"/><line x1="64" y1="24" x2="66" y2="40" stroke="#c9ccd4" stroke-width="3"/><line x1="72" y1="24" x2="74" y2="40" stroke="#c9ccd4" stroke-width="3"/><line x1="64" y1="24" x2="72" y2="24" stroke="#c9ccd4" stroke-width="3"/><rect x="64" y="40" width="12" height="14" rx="2" fill="#e7e9ee"/><path d="M40 40 Q52 52 62 46" stroke="#f2b134" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/></svg><h3>robot control</h3><span class="sys">π0, π0.5 (flow matching)</span><br></div>
+      <div class="box"><svg viewBox="0 0 120 80"><path d="M10 40 C 20 8, 30 8, 40 40 S 60 72, 70 40 S 90 8, 110 40" fill="none" stroke="#ff6b6b" stroke-width="7" stroke-linecap="round"/><path d="M10 40 C 20 72, 30 72, 40 40 S 60 8, 70 40 S 90 72, 110 40" fill="none" stroke="#5ab0ff" stroke-width="7" stroke-linecap="round" opacity="0.85"/></svg><h3>proteins &amp; molecules</h3><span class="sys">RFdiffusion, AlphaFold 3 (diffusion)</span><br></div>
+      <div class="box"><svg viewBox="0 0 120 80"><line x1="10" x2="10" y1="36" y2="44" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="18" x2="18" y1="30" y2="50" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="26" x2="26" y1="22" y2="58" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="34" x2="34" y1="10" y2="70" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="42" x2="42" y1="26" y2="54" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="50" x2="50" y1="32" y2="48" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="58" x2="58" y1="18" y2="62" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="66" x2="66" y1="6" y2="74" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="74" x2="74" y1="20" y2="60" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="82" x2="82" y1="30" y2="50" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="90" x2="90" y1="14" y2="66" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="98" x2="98" y1="24" y2="56" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="106" x2="106" y1="34" y2="46" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/><line x1="114" x2="114" y1="37" y2="43" stroke="#5ab0ff" stroke-width="5" stroke-linecap="round"/></svg><h3>audio</h3><span class="sys">Voicebox (flow matching), Stable Audio (diffusion)</span><br></div>
+    </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 1</div>
+  <h1>Preliminaries</h1>
+</section>
+
+<section>
+  <h2>Deforming probability</h2>
+  <div class="cols" style="grid-template-columns:1fr 1.1fr; align-items:center; gap:1em">
+    <div>
+      <div data-widget="jacdet" data-config='{"width":560,"height":370,"tau":0,"print_tau":1,"loop":true}'></div>
+      <p class="small" style="margin:0.3em 0 0">$\mathbb P[X \in A] = \mathbb P[Y \in \varphi(A)]$: the mass moves with the map. Arrows: the two sides of $A$ after the map, i.e. the columns of the Jacobian $D\varphi$ times the side length (for small $A$). The area they span, relative to $A$, is the local area change $|\det D\varphi|$.</p>
+    </div>
+    <div style="font-size:0.85em">
+      <p style="margin:0">Consider an invertible map between random variables: $$Y = \varphi(X)$$</p>
+      <p style="margin:0.4em 0 0">Probabilities have to stay the same: $$\mathbb P[Y \in B] = \mathbb P[X \in A] \;\Longrightarrow\; \int_B p_Y(y)\,dy = \int_A p_X(x)\,dx$$</p>
+      <p style="margin:0.4em 0 0">Substitute $x = \varphi^{-1}(y)$ on the right: $$\int_A p_X(x)\,dx = \int_B p_X\big(\varphi^{-1}(y)\big)\,\big|\det D\varphi^{-1}(y)\big|\,dy$$</p>
+      <div class="box key" style="margin-top:0.5em">$$p_Y(y) = p_X\big(\varphi^{-1}(y)\big)\;\big|\det D\varphi^{-1}(y)\big|$$</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Deforming probability: example</h2>
+  <div class="box key" style="margin-top:0.5em">$$p_Y(y) = p_X\big(\varphi^{-1}(y)\big)\;\big|\det D\varphi^{-1}(y)\big|$$</div>
+  <div data-widget="warp1d" data-config='{"s":0.1,"t":5,"width":1180,"height":355}'></div>
+  <div class="question" style="font-size:0.78em; margin-top:0.4em">A unimodal density became multimodal. How was this possible? <span class="fragment">The mass near $x$ lands near $y = \varphi(x)$, squeezed into an interval $|\varphi'(x)|$ times as long: $p_Y(y) = p_X(x)\,/\,|\varphi'(x)|$. Where $\varphi$ compresses, density piles up.</span></div>
+</section>
+
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 2</div>
+  <h1>Learning deformation</h1>
+</section>
+
+<section>
+  <h2>A simple idea how one could learn the deformed distribution</h2>
+  <p style="font-size:0.8em; margin:0">A <b>parametrised density</b>, e.g. a mixture of Gaussians: $$p_\theta(x) = \sum_{k=1}^K \pi_k\, \mathcal N(x;\, \mu_k, \Sigma_k), \qquad \theta = \{\pi_k, \mu_k, \Sigma_k\}_{k=1}^K$$</p>
+  <div data-widget="gmmfit" data-config='{"data":"moons","n":300,"k":7,"width":1000,"height":350}' style="margin:0.2em auto 0"></div>
+  <div class="question" style="margin-top:0.4em">1. What does “fit the data” mean exactly?</div>
+  <div class="question" style="margin-top:0.4em">2. Is the mixture of Gaussians the best choice?</div>
+</section>
+
+<section>
+  <h2>When is the fit good? KL divergence</h2>
+  <div style="font-size:0.85em">
+    <p style="margin:0">When our model distribution $\cp{p_\theta}$ is close to the unknown target distribution $\cq{q}$:</p>
+  </div>
+  <div style="font-size:0.85em">
+    <div class="box key">
+      $$D_{\mathrm{KL}}(\cq{q} \,\|\, \cp{p_\theta}) = \int \cq{q}(x)\,\log\frac{\cq{q}(x)}{\cp{p_\theta}(x)}\,dx = \mathbb E_{x \sim \cq{q}}\Big[\log\frac{\cq{q}(x)}{\cp{p_\theta}(x)}\Big]$$
+      <p class="small" style="margin:0.2em 0 0">the Kullback–Leibler divergence</p>
+    </div>
+  </div>
+  <div class="question" style="margin-top:0.4em">Why does this measure make sense?</div>
+  <div>
+    <p class="fragment" data-fragment-index="0" style="margin:0">Consider a coin flip:</p>
+    <p class="fragment" data-fragment-index="0" style="margin:0.3em 0 0.3em"><span class="coin h">H</span><span class="coin h">H</span><span class="coin">T</span><span class="coin h">H</span><span class="coin">T</span><span class="coin">T</span><span class="coin h">H</span> <span class="dim">… $N_H$ heads, $N_T$ tails</span></p>
+    <div class="fragment" data-fragment-index="2">
+      <p style="margin:0">Compare the probabilities under the <span class="blue">true distribution</span> $\cq{q}$ against the <span class="accent">model</span> $\cp{p}$:</p>
+      $$\Big(\prod_{i=1}^N \frac{\cq{q}(x_i)}{\cp{p}(x_i)}\Big)^{1/N} = \Big(\frac{\cq{q_H}^{N_H}\, \cq{q_T}^{N_T}}{\cp{p_H}^{N_H}\, \cp{p_T}^{N_T}}\Big)^{1/N}$$
+    </div>
+  </div>
+  <div class="fragment" data-fragment-index="3">
+    <p style="margin:0">Take the log and consider $N \to \infty$ (so, e.g., $N_H/N \to \cq{q_H}$):</p>
+    $$\frac{N_H}{N}\log\frac{\cq{q_H}}{\cp{p_H}} + \frac{N_T}{N}\log\frac{\cq{q_T}}{\cp{p_T}} \;\longrightarrow\; \sum_x \cq{q}(x)\log\frac{\cq{q}(x)}{\cp{p}(x)}$$
+  </div>
+</section>
+
+<section>
+  <h2>KL divergence in practice</h2>
+  <div class="cols" style="gap:1.3em; align-items:start; font-size:0.8em">
+    <div>
+      <div class="box key" style="margin:0">$$D_{\mathrm{KL}}(\cq{q} \,\|\, \cp{p_\theta}) = \mathbb E_{x \sim \cq{q}}\Big[\log\frac{\cq{q}(x)}{\cp{p_\theta}(x)}\Big]$$</div>
+      <div class="question" style="margin-top:0.4em">Do we have to minimize KL divergence directly?</div>
+      <div class="fragment" data-fragment-index="0" style="margin-top:0.6em">
+        <p style="margin:0">Split the log:</p>
+        $$D_{\mathrm{KL}}(\cq{q}\,\|\,\cp{p_\theta}) = \underbrace{\mathbb E_{x\sim \cq{q}}[\log \cq{q}(x)]}_{\text{does not depend on } \theta} \underbrace{- \mathbb E_{x\sim \cq{q}}[\log \cp{p_\theta}(x)]}_{\text{cross-entropy}}$$
+      </div>
+      <p class="small fragment" data-fragment-index="0" style="margin:0.3em 0 0">The first term is a property of the data alone (its entropy, up to sign): unknown, but the same for every $\theta$. Only the second term moves when we change the model.</p>
+      <div class="takeaway fragment" data-fragment-index="0" style="margin-top:0.6em">Minimizing $D_{\mathrm{KL}}$ = minimizing the cross-entropy. <b>Loss:</b> $$\mathcal L(\theta) = -\,\mathbb E_{x \sim \cq{q}}[\log \cp{p_\theta}(x)]$$</div>
+    </div>
+    <div>
+      <div class="question fragment" data-fragment-index="0" style="margin:0">An expectation over the unknown $\cq{q}$: how do we compute it during training?</div>
+      <p class="fragment" data-fragment-index="1" style="margin:0.6em 0 0">Monte Carlo: $$\mathbb E_{x \sim \cq{q}}[f(x)] \approx \frac{1}{N}\sum_{i=1}^N f(x_i), \qquad x_i \sim \cq{q}$$ <span class="small">samples drawn according to the distribution</span></p>
+      <div class="question fragment" data-fragment-index="1" style="margin-top:0.5em">How do we get samples from $\cq{q}$?</div>
+      <div class="takeaway fragment" style="margin-top:0.5em"><b>Data!</b> The training set is a sample from $\cq{q}$: $$\mathcal L(\theta) \approx -\frac{1}{N}\sum_{i=1}^N \log \cp{p_\theta}(x_i)$$ the cross-entropy of Lab 4, now for a density.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Is the mixture of Gaussians the best choice?</h2>
+  <div class="box" style="font-size:0.78em">
+    <p style="margin:0 0 0.3em"><b>Parameter cost.</b> A Gaussian in $d$ dimensions needs at least $d$ numbers, for its mean alone. <b>How many Gaussians</b> does the budget of a 7B network buy?</p>
+    <div data-widget="paramcost" data-config='{"budget":7e9,"images":1e9}'></div>
+  </div>
+  <div class="box fragment" style="font-size:0.78em; margin-top:0.5em">
+    <div style="display:flex; gap:1.2em; align-items:center">
+      <div data-widget="condfam" data-config='{"size":230,"gap":16,"groups":["dog","cat"]}' style="flex:none"></div>
+      <p style="margin:0">We might want to learn a <b>family of distributions</b> $\{\, p_\theta(\,\cdot \mid y) \,\}_y$ (e.g., one distribution per prompt). A mixture has no natural extra input path to allow conditioning.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Residual flows</h2>
+  <div class="cols" style="grid-template-columns:1fr 1.2fr; gap:1.2em; align-items:start; font-size:0.78em">
+    <div>
+      <p style="margin:0">We can try with a neural network instead:</p>
+      <p style="margin:0">$$X \sim p_{\text{init}}, \qquad \Phi_\theta(X) \sim \cp{p_\theta}$$</p>
+      <svg viewBox="0 0 300 150" style="width:100%; max-width:240px; display:block; margin:0.3em auto; font-family:Inter, Arial"><line x1="40" y1="49.0" x2="120" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="49.0" x2="120" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="49.0" x2="120" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="49.0" x2="120" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="49.0" x2="120" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="75.0" x2="120" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="75.0" x2="120" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="75.0" x2="120" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="75.0" x2="120" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="75.0" x2="120" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="101.0" x2="120" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="101.0" x2="120" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="101.0" x2="120" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="101.0" x2="120" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="40" y1="101.0" x2="120" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="23.0" x2="200" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="23.0" x2="200" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="23.0" x2="200" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="23.0" x2="200" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="23.0" x2="200" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="49.0" x2="200" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="49.0" x2="200" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="49.0" x2="200" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="49.0" x2="200" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="49.0" x2="200" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="75.0" x2="200" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="75.0" x2="200" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="75.0" x2="200" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="75.0" x2="200" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="75.0" x2="200" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="101.0" x2="200" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="101.0" x2="200" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="101.0" x2="200" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="101.0" x2="200" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="101.0" x2="200" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="127.0" x2="200" y2="27.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="127.0" x2="200" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="127.0" x2="200" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="127.0" x2="200" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="120" y1="127.0" x2="200" y2="123.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="23.0" x2="270" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="23.0" x2="270" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="23.0" x2="270" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="49.0" x2="270" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="49.0" x2="270" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="49.0" x2="270" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="75.0" x2="270" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="75.0" x2="270" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="75.0" x2="270" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="101.0" x2="270" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="101.0" x2="270" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="101.0" x2="270" y2="99.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="127.0" x2="270" y2="51.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="127.0" x2="270" y2="75.0" stroke="#4a505c" stroke-width="1"/><line x1="200" y1="127.0" x2="270" y2="99.0" stroke="#4a505c" stroke-width="1"/><circle cx="40" cy="49.0" r="7" fill="#5ab0ff" stroke="#15171c" stroke-width="1.5"/><circle cx="40" cy="75.0" r="7" fill="#5ab0ff" stroke="#15171c" stroke-width="1.5"/><circle cx="40" cy="101.0" r="7" fill="#5ab0ff" stroke="#15171c" stroke-width="1.5"/><circle cx="120" cy="27.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="120" cy="51.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="120" cy="75.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="120" cy="99.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="120" cy="123.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="200" cy="27.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="200" cy="51.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="200" cy="75.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="200" cy="99.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="200" cy="123.0" r="7" fill="#e7e9ee" stroke="#15171c" stroke-width="1.5"/><circle cx="270" cy="49.0" r="7" fill="#f2b134" stroke="#15171c" stroke-width="1.5"/><circle cx="270" cy="75.0" r="7" fill="#f2b134" stroke="#15171c" stroke-width="1.5"/><circle cx="270" cy="101.0" r="7" fill="#f2b134" stroke="#15171c" stroke-width="1.5"/><text x="155" y="18" fill="#e7e9ee" font-size="18" text-anchor="middle" font-style="italic">Φ<tspan baseline-shift="sub" font-size="12">θ</tspan></text></svg>
+      <div class="question" style="margin-top:0.4em">Will any network $\Phi_\theta$ work?</div>
+      <p class="fragment" data-fragment-index="0" style="margin:0.4em 0 0">It has to be a valid probability deformation: $$\cp{p_\theta}(x) = p_{\text{init}}\big(\Phi_\theta^{-1}(x)\big)\,\big|\det D\Phi_\theta^{-1}(x)\big|$$</p>
+      <ul class="fragment" data-fragment-index="0" style="margin:0.2em 0 0 1.1em">
+        <li>it has to be <b>invertible</b>…</li>
+        <li>…and we must be able to compute the <b>determinant</b> efficiently</li>
+      </ul>
+    </div>
+    <div class="fragment" data-fragment-index="1">
+      <p style="margin:0">One way to do it: residual networks (Lecture 4)</p>
+      <div><svg viewBox="0 0 980 130" style="width:100%; display:block; margin:0.3em 0; font-family:Inter, Arial"><defs><marker id="cha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><line x1="78" y1="50" x2="332" y2="50" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cha)"/><line x1="388" y1="50" x2="430" y2="50" stroke="#9aa1ae" stroke-width="2"/><text x="465" y="57" fill="#9aa1ae" font-size="28" text-anchor="middle">…</text><line x1="500" y1="50" x2="552" y2="50" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cha)"/><line x1="608" y1="50" x2="872" y2="50" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cha)"/><rect x="110" y="26" width="190" height="48" rx="8" fill="#1e2128" stroke="#b28dff" stroke-width="2"/><text x="205" y="58" fill="#e7e9ee" font-size="21" text-anchor="middle">+ δ · u<tspan baseline-shift="sub" font-size="14">1</tspan>(x)</text><rect x="650" y="26" width="190" height="48" rx="8" fill="#1e2128" stroke="#b28dff" stroke-width="2"/><text x="745" y="58" fill="#e7e9ee" font-size="21" text-anchor="middle">+ δ · u<tspan baseline-shift="sub" font-size="14">N</tspan>(x)</text><circle cx="50" cy="50" r="26" fill="#272b34" stroke="#5ab0ff" stroke-width="2"/><text x="50" y="57" fill="#e7e9ee" font-size="20" text-anchor="middle">x₀</text><circle cx="360" cy="50" r="26" fill="#272b34" stroke="#5ab0ff" stroke-width="2"/><text x="360" y="57" fill="#e7e9ee" font-size="20" text-anchor="middle">x₁</text><circle cx="580" cy="50" r="26" fill="#272b34" stroke="#5ab0ff" stroke-width="2"/><text x="580" y="57" fill="#e7e9ee" font-size="20" text-anchor="middle">x<tspan baseline-shift="sub" font-size="14">N−1</tspan></text><circle cx="900" cy="50" r="26" fill="#272b34" stroke="#5ab0ff" stroke-width="2"/><text x="900" y="57" fill="#e7e9ee" font-size="20" text-anchor="middle">x<tspan baseline-shift="sub" font-size="14">N</tspan></text><text x="50" y="118" fill="#9aa1ae" font-size="18" text-anchor="middle">x₀ ~ N(0, I)</text><text x="900" y="118" fill="#9aa1ae" font-size="18" text-anchor="middle">x<tspan baseline-shift="sub" font-size="13">N</tspan> ~ p<tspan baseline-shift="sub" font-size="13">θ</tspan></text></svg>
+      $$\varphi = \varphi_N \circ \dots \circ \varphi_1, \qquad \varphi_k(x) = x + \delta\, u_k(x)$$</div>
+      <div>
+        <p style="margin:0">If $u_{k,i}$ depends only on $x_1, \dots, x_i$, we can invert one coordinate at a time: $\varphi_k$ is invertible as soon as no diagonal entry vanishes, and the triangular Jacobian makes the determinant a product:</p>
+        <div style="font-size:0.8em">$$D\varphi_k = \begin{pmatrix} 1 + \delta\,\partial_1 u_{k,1} & 0 & \cdots & 0 \\ * & 1 + \delta\,\partial_2 u_{k,2} & & \vdots \\ \vdots & & \ddots & 0 \\ * & \cdots & * & 1 + \delta\,\partial_d u_{k,d} \end{pmatrix}$$ $$\det D\varphi_k = \prod_{i=1}^d \big(1 + \delta\,\partial_i u_{k,i}\big)$$</div>
+      </div>
+      <div class="box key" style="margin-top:0.4em">$$\mathcal L(\theta) = -\,\mathbb E_{x\sim \cq{q}}\Big[\log p_{\text{init}}\big(\varphi^{-1}(x)\big) + \sum_{k=1}^N \log\big|\det D\varphi_k^{-1}\big|\Big]$$</div>
+    </div>
+  </div>
+  <aside class="notes">Invertibility, precisely: with a triangular u_k the map is y_i = x_i + δ u_{k,i}(x_1, …, x_i); solve for x_1, then x_2, and so on. Each step is a scalar equation, invertible when the derivative 1 + δ ∂_i u_{k,i} never vanishes (continuous and nonzero means a fixed sign, so strictly monotone; onto as long as the map is unbounded, e.g. for bounded u). No smallness of δ is needed there. For a general, non-triangular u_k the usual sufficient condition is that δ u_k is a contraction (Lipschitz constant below 1), which is where "small δ" comes from; a nonvanishing determinant alone does not give global invertibility in that case (think of (x, y) ↦ (eˣ cos y, eˣ sin y)).</aside>
+</section>
+
+<section>
+  <h2>A residual step is an Euler step</h2>
+  <div class="cols" style="align-items:stretch">
+    <div class="box"><h3>residual block (Lecture 4)</h3><p>$$x_{k+1} = x_k + \delta\, u_k(x_k)$$</p></div>
+    <div class="box fragment"><h3>Euler's method for $\frac{dx}{dt} = u(t, x)$</h3><p>$$x(t + h) \approx x(t) + h\, u\big(t, x(t)\big)$$</p><p class="small">a numerical solver for an ordinary differential equation (ODE); the step $h$ is the solver's choice</p></div>
+  </div>
+  <div class="takeaway fragment" style="margin-top:0.9em">The same formula: let $\delta \to 0$, $N \to \infty$ and a chain of residual blocks becomes a <b>continuous-time flow</b> driven by one velocity field $u$</div>
+</section>
+
+<section>
+  <h2>Numerical integration: the step size matters</h2>
+  <div class="cols" style="grid-template-columns:1fr 1.2fr; align-items:center; margin-bottom:0.2em">
+    <p style="margin:0">$$x_{k+1} = x_k + h\, u(x_k), \qquad h = \frac{T}{n}$$</p>
+    <p class="small" style="margin:0">Euler's method: $n$ steps of size $h$ over the time $T$. Here $u(x, y) = (-y,\, x)$ is a rotation and $T = 2\pi$ is one full turn, so the exact solution stays on its circle.</p>
+  </div>
+  <div data-widget="ode2d" data-config='{"n":32,"width":400,"height":400}'></div>
+  <p class="small" style="margin-top:0.3em">Euler follows the tangent, so large steps drift away. More steps = a more faithful flow, at the cost of more evaluations of $u$. Remember this for sampling.</p>
+</section>
+
+<section>
+  <h2>Probability flows</h2>
+  <div data-widget="flowrows" data-config='{"source":"gauss8","target":"moons","size":360,"layout":"row","gap":24,"panels":2,"t":0,"print_t":0.6}'></div>
+  <div style="display:grid; grid-template-columns:repeat(2, 360px); gap:0 24px; justify-content:center; font-size:0.72em; margin-top:0.2em">
+      <div><span class="blue" style="font-weight:600">Flow</span> $$\underbrace{\varphi}_{\text{flow}} : \underbrace{[0, 1]}_{\text{time}} \times \underbrace{\mathbb R^d}_{\text{points in space}} \to \mathbb R^d$$</div>
+      <div><span class="blue" style="font-weight:600">Underlying time-dependent vector field</span> $$\frac{d\varphi_t(x_t)}{dt} = u_t(x_t)$$</div>
+  </div>
+  <div class="takeaway fragment" style="margin-top:0.9em">A shift in the approach: learn the vector field and use numerical integration to determine the probability</span></div>
+</section>
+
+<section>
+  <h2>A flow: a velocity field moving every point</h2>
+  <div class="cols" style="grid-template-columns:auto 1fr; gap:1.2em; align-items:center">
+    <div data-widget="flow2d" data-config='{"mode":"flow","source":"gauss","target":"moons","width":360,"height":360,"t":0,"field":true,"panel":14,"loop":true,"print_t":0.5}'></div>
+    <div style="font-size:0.8em">
+      <p style="margin:0">$$\frac{d}{dt}\varphi_t(x) = u_t\big(\varphi_t(x)\big), \qquad \varphi_0(x) = x$$</p>
+      <p class="small" style="margin:0.6em 0 0.2em">Glossary:</p>
+      <ul style="margin:0">
+        <li>$\varphi_t(x)$: where the point that started at $x$ is at time $t$</li>
+        <li>$u_t(x) = u(t, x)$: the <b>velocity field</b> — the thing we directly learn</li>
+      </ul>
+    </div>
+  </div>
+  <div class="box fragment" style="font-size:0.8em; margin-top:0.6em">
+    <b>New:</b> the <b>probability path</b> $\cb{p_t}$ = the distribution of $\varphi_t(X_0)$ at time $t$. $\cb{p_0} = \mathcal N(0, I)$, and we want $\cb{p_1} \approx q$, i.e., the target distribution.
+  </div>
+</section>
+
+<section>
+  <h2>What we get</h2>
+  <div class="cols" style="grid-template-columns:0.85fr 1fr 1.6fr; font-size:0.78em; gap:0.8em; align-items:stretch">
+    <div class="box"><h3>any network</h3>$v_\theta(t, x)$ needs no invertibility: an ODE can always be run backwards in time</div>
+    <div class="box"><h3>an arbitraty number of steps</h3>how many numerical integration steps, how big, how computed is not baked in into the network</div>
+    <div class="box"><h3>the density is derived implicitly</h3>$$\log p_1(x_1) = \log p_0(x_0) - \int_0^1 \nabla\!\cdot u_t(x_t)\,dt,$$ the continuous version of $$\log p_{\text{init}}\big(\varphi^{-1}(x)\big) + \sum_{k=1}^N \log\big|\det D\varphi_k^{-1}|$$</div>
+  </div>
+  <div class="box fragment" data-fragment-index="0" style="margin-top:0.8em; font-size:0.85em">
+    <b><a href="https://arxiv.org/abs/1806.07366" target="_blank" rel="noopener">Continuous normalizing flows</a></b> train $v_\theta$ by maximum likelihood with the new formula: every training step integrates the ODE <em>and</em> the divergence of a network, for every data point. Correct, but slow.
+  </div>
+  <div class="takeaway fragment" data-fragment-index="1" style="margin-top:0.6em"><a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Flow matching</a> (2022): train the same $v_\theta$ without ever computing a density.</div>
+  <p class="formula-big fragment" data-fragment-index="1" style="font-size:1.3em">$$\mathcal L_{\text{FM}}(\theta) = \mathbb E_{\,t \sim U[0,1],\; x \sim p_t}\; \big\| v_\theta(t, x) - u_t(x) \big\|^2$$</p>
+</section>
+
+<section class="optional">
+  <h2>Why a velocity field defines a probability path <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="grid-template-columns:1.2fr 1fr; align-items:center">
+    <div>
+      <p class="formula-big">$$\frac{\partial p_t(x)}{\partial t} = -\,\nabla\!\cdot\big(p_t(x)\, u_t(x)\big)$$</p>
+      <p style="font-size:0.85em">The <b>continuity equation</b>: the density at $x$ changes exactly by the net inflow of probability mass carried by the velocity field. Mass is neither created nor destroyed — only moved.</p>
+      <p class="small">$u_t$ <em>generates</em> $p_t$ when this holds. The equation is linear in $(p_t,\, p_t u_t)$ — we use that on the marginal-velocity slide.</p>
+    </div>
+    <div><svg viewBox="0 0 330 250" style="width:100%; max-width:330px; display:block; font-family:Inter, Arial"><defs><marker id="cta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5a606c"/></marker><marker id="ctb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f2b134"/></marker></defs><path d="M30 238 C 40 170, 55 110, 85 8" fill="none" stroke="#5a606c" stroke-width="1.5" marker-end="url(#cta)"/><path d="M85 238 C 95 170, 110 110, 140 8" fill="none" stroke="#5a606c" stroke-width="1.5" marker-end="url(#cta)"/><path d="M140 238 C 150 170, 165 110, 195 8" fill="none" stroke="#5a606c" stroke-width="1.5" marker-end="url(#cta)"/><path d="M195 238 C 205 170, 220 110, 250 8" fill="none" stroke="#5a606c" stroke-width="1.5" marker-end="url(#cta)"/><path d="M250 238 C 260 170, 275 110, 305 8" fill="none" stroke="#5a606c" stroke-width="1.5" marker-end="url(#cta)"/><rect x="120" y="95" width="80" height="60" fill="#1e2128" stroke="#e7e9ee" stroke-width="2"/><text x="160" y="132" fill="#e7e9ee" font-size="22" text-anchor="middle" font-style="italic">x</text><line x1="132" y1="185" x2="138" y2="158" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><line x1="152" y1="185" x2="158" y2="158" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><line x1="172" y1="185" x2="178" y2="158" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><line x1="138" y1="93" x2="144" y2="66" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><line x1="158" y1="93" x2="164" y2="66" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><line x1="178" y1="93" x2="184" y2="66" stroke="#f2b134" stroke-width="2.5" marker-end="url(#ctb)"/><text x="212" y="178" fill="#f2b134" font-size="15">inflow</text><text x="212" y="78" fill="#f2b134" font-size="15">outflow</text><text x="250" y="30" fill="#9aa1ae" font-size="16" font-style="italic">u_t(x)</text></svg></div>
+  </div>
+</section>
+
+<section>
+  <h2>Flow matching</h2>
+  <p style="font-size:0.85em">Suppose we knew a velocity field $u_t$ that carries $\mathcal N(0, I)$ onto $p_{\text{data}}$ along a probability path $p_t$. Fit a network to it by least squares:</p>
+  <p class="formula-big" style="font-size:1.3em">$$\mathcal L_{\text{FM}}(\theta) = \mathbb E_{\,t \sim U[0,1],\; x \sim p_t}\; \big\| v_\theta(t, x) - u_t(x) \big\|^2$$</p>
+  <div class="cols" data-fragment-index="0" style="grid-template-columns:repeat(4,1fr); gap:0.6em; font-size:0.66em; margin-top:0.2em">
+    <div class="box"><b>$t \sim U[0,1]$</b><br>a random moment</div>
+    <div class="box"><b>$x \sim p_t$</b><br>a point where the flow actually passes at time $t$</div>
+    <div class="box"><b>$v_\theta(t, x)$</b><br>the network: any architecture, inputs $t$ and $x$</div>
+    <div class="box"><b>$u_t(x)$</b><br>the target velocity</div>
+  </div>
+  <div class="takeaway fragment" data-fragment-index="1" style="margin-top:0.9em">
+    <p>Problems:</p>
+    <ul style="margin:0.2em 0 0.2em 1.2em; padding:0">
+      <li>We know neither $p_t$ (no way to sample) nor $u_t$ (no target).</li>
+      <li>Infinitely many flows go from noise to data, and</li>
+      <li>we cannot write down a single one of them...</li>
+    </ul>
+  </div>
+  <div class="question fragment" data-fragment-index="1">What can we do?</div>
+</section>
+
+<section>
+  <h2>Single sample simple paths</h2>
+  <p>Can design reasonable paths if we consider datasets with single datapoints:</p>
+  <div data-widget="path1d" data-config='{"mode":"cond","path":"ot","x1":-2.5,"width":600,"height":290,"animate":true,"legend":"right","print_t":1}'></div>
+  <div style="font-size:0.8em">
+      <p style="margin:0.3em 0 0"><b>conditional probability path</b> $p_t(x \mid x_1)$: from $\mathcal N(0, I)$ at $t = 0$ to a distribution gathered around $x_1$ at $t = 1$ (our design choice)</p>
+      <p class="fragment" data-fragment-index="0" style="margin:0.4em 0 0">As before, a related <b>conditional vector field</b> $u_t(x \mid x_1)$ determines the conditional deformation (continuity equation): $$\frac{\partial}{\partial t}\, p_t(x \mid x_1) = -\,\nabla\!\cdot\Big(p_t(x \mid x_1)\; u_t(x \mid x_1)\Big)$$</p>
+      <p class="fragment" data-fragment-index="0" style="margin:0.3em 0 0">For some families of conditional paths exact formulas for $u_t(x \mid x_1)$ can be derived (see animation above).</p>
+    </div>
+</section>
+
+<section>
+  <h2>Mixtures of single datapoint paths</h2>
+  <p>Average the simple paths over all data points:</p>
+  <div data-widget="path1d" data-config='{"mode":"marginal","path":"ot","width":600,"height":290,"animate":true,"legend":"right","print_t":1}'></div>
+  <div style="font-size:0.8em">
+      <p style="margin:0.3em 0 0">$$p_t(x) = \int p_t(x \mid x_1)\; p_{\text{data}}(x_1)\, dx_1$$</p>
+      <ul style="margin:0.2em 0 0">
+        <li>$t = 0$: every conditional path starts at $\mathcal N(0, I)$, so $p_0 = \mathcal N(0, I)$</li>
+        <li>$t = 1$: a tiny Gaussian around each data point, so $p_1 \approx p_{\text{data}}$</li>
+        <li>in between: a valid probability path from noise to data</li>
+      </ul>
+      <div class="question" style="font-size:0.9em">Which conditional distributions at $t = 1$ give <em>exactly</em> $p_{\text{data}}$? <span class="fragment">Dirac deltas, i.e. $\sigma_{\min} = 0$.</span></div>
+  </div>
+  <aside class="notes">Analogy: discretising a deformable substance into particles in a physics simulation; each particle carries its own simple motion, the material is the sum. We hope the mixture is a good approximation of the data distribution; it is, if the conditional paths are chosen well and there is enough data.</aside>
+</section>
+
+<section>
+  <h2>The velocity of the mixture</h2>
+  <p style="font-size:0.8em; margin:0">One can<sup>*</sup> show that at a given point on the trajectory the mixture velocity is the average of the simple velocities:</p>
+  <div style="font-size:0.9em">$$u_t(x_t) = \mathbb E_{\cb{p_{1|t}}}\big[\, u_t(x_t \mid x_1) \,\big] = \int u_t(x_t \mid x_1)\; \cb{\frac{p_t(x_t \mid x_1)\, q(x_1)}{p_t(x_t)}}\; dx_1 = \int u_t(x_t \mid x_1)\; \cb{p_t(x_1 \mid x_t)}\; dx_1$$</div>
+  <div data-widget="condmarg" data-config='{"mode":"fan","width":900,"height":320,"print_t":0.3}' style="width:900px; margin:0.1em auto 0"></div>
+  <div class="question" style="font-size:0.85em; margin-top:0.3em">Can we sample from $\cb{p_t(x_1 \mid x_t)}$? Why yes/no?</div>
+  <p style="font-size:0.6em; margin:0.9em 0 0; color:var(--fg-dim); border-top:1px solid var(--line); padding-top:0.3em"><sup>*</sup> relatively easily; again, via the continuity equation</p>
+  <aside class="notes">The animation is exact, no network: two source clusters on the left, two data clusters on the right, linear conditional paths. Each particle follows the marginal field. At every moment the thin arrows are the conditional velocities u_t(x | x₁) towards every data point, drawn with the posterior p(x₁ | x_t = x) as opacity; the bold arrow is their average, u_t(x). Early on the fan is wide, the posterior is spread over both clusters and the average points in between; later the posterior collapses onto one cluster and the fan narrows. Why no closed form in general: p_t(x) in the denominator is the mixture over the whole data set, and for real data (and non-Gaussian paths) that integral is intractable. Plugging the mixture into the continuity equation and using linearity shows this u_t transports p_t.</aside>
+</section>
+
+<section>
+  <h2>The trick: regress on the conditional velocity instead</h2>
+  <div style="font-size:0.78em">
+    <p style="margin:0">Surprisingly, one can<sup>*</sup> show that:</p>
+    $$\underbrace{\mathbb E_{t,\; x \sim p_t}\, \big\| v_\theta(t, x) - u_t(x) \big\|^2}_{\mathcal L_{\text{FM}}(\theta) \ \text{(unconditional loss)}} \;=\; \underbrace{\mathbb E_{t,\; x_1 \sim p_{\text{data}},\; x \sim p_t(\cdot \mid x_1)}\, \big\| v_\theta(t, x) - u_t(x \mid x_1) \big\|^2}_{\mathcal L_{\text{CFM}}(\theta) \ \text{(conditional loss)}} + \text{const}$$
+  </div>
+  <div data-widget="condmarg" data-config='{"mode":"loss","width":1000,"height":240,"tflow":0.5,"print_t":0.9}' style="width:1000px; margin:0.2em auto 0"></div>
+  <p style="font-size:0.78em; margin:0.3em 0 0">Think of changing the sampling scheme: instead of sampling $x \sim p_t$, estimating $\bar{u}_t(x)$ for each $x$ and then estimating the loss based on the estimated targets, we sample single <b>conditional arrows</b> $u_t(x \mid x_1)$ all over the space, compute the squared error for each and compute the average to estimate the loss.</p>
+  <div class="takeaway" style="margin-top:0.3em; font-size:0.85em">With reasonable conditional paths and enough data we can estimate the conditional loss and compute gradients without ever estimating the true vector field.</div>
+  <p style="font-size:0.6em; margin:0.9em 0 0; color:var(--fg-dim); border-top:1px solid var(--line); padding-top:0.3em"><sup>*</sup>again, relatively easily</p>
+  <aside class="notes">Left panel, the unconditional loss as we would have to estimate it: sample x_t ~ p_t (the dots), and for each one the target u_t(x_t) is itself an average over x₁ drawn from the posterior p(x₁ | x_t), the fan shown at one of the points: an inner Monte Carlo at every point, and we do not have the posterior. Right panel, what we do instead: sample pairs (x₀, x₁) all over the place, one conditional arrow u_t(x_t | x₁) at each x_t, and feed those to the loss directly. The bold arrows are the averages of the sampled arrows near the same points: as the arrows accumulate they converge to the targets on the left. Replacing the target u_t(x) by the conditional arrow changes it by a zero-mean noise, so the loss changes by a constant. Proof sketch: expand both squares; the ‖v_θ‖² terms agree because (t, x_t) has the same distribution under both sampling schemes; the cross terms agree by the tower property, since u_t(x) = E[u_t(x | X₁) | X_t = x]; the remaining terms do not depend on θ. Least squares with a noisy target learns the conditional mean: the network does the averaging, nobody computes the posterior.</aside>
+</section>
+
+<section>
+  <h2>The same $p_t$, different paths</h2>
+  <p style="font-size:0.8em; margin:0">The conditional arrows (left) move points along straight lines that can cross. The marginal field moves the same points along curves that never cross. At every $t$, both in the right and in the left animation, we have a sample from the same $p_t$. The resulting samples are not the same, but the underlying distributions are</p>
+  <div data-widget="condmarg" data-config='{"mode":"paths","width":1000,"height":340,"print_t":0.55}' style="width:1000px; margin:0.3em auto 0"></div>
+  <aside class="notes">The effect of the previous slide on the motion itself: left, random pairs (x₀, x₁) move along straight conditional paths and cross; right, the same starting points follow the marginal field and never cross. Same p_t at every time, so the loss cannot tell the difference, but the learned field is the curved one.</aside>
+</section>
+
+<section>
+  <h2>The whole algorithm</h2>
+  <div class="cols">
+    <div>
+      <h3>training</h3>
+<pre class="algo"><code>initialize θ randomly
+repeat:
+    x1 ← a minibatch of data
+    x0 ← noise  N(0, I)        # same shape as x1
+    t  ← Uniform[0, 1]          # one per example
+    xt ← (1 − t) · x0 + t · x1
+    L  ← ‖ v_θ(t, xt) − (x1 − x0) ‖²
+    θ  ← θ − η · ∇_θ L</code></pre>
+    </div>
+    <div>
+      <h3>inference</h3>
+<pre class="algo"><code>x ← noise  N(0, I)
+for k = 0, …, n−1:
+    x ← x + (1/n) · v_θ(k/n, x)
+return x</code></pre>
+    </div>
+  </div>
+  <div class="takeaway" style="font-size:0.8em; margin-top:0.8em">During training: no likelihood, no Jacobian, no ODE. One network evaluation per example, like any regression. The ODE solver appears only during inference.</div>
+</section>
+
+<section>
+  <h2>Watch it learn</h2>
+  <div data-widget="flow2d" data-config='{"mode":"train","source":"gauss","target":"moons","width":420,"height":420,"field":false}'></div>
+  <p class="small" style="margin-top:0.3em">A 3-layer MLP $v_\theta(t, x)$ trained in your browser with Adam on the conditional loss (backprop written by hand, as in Lecture 1). Blue: the samples it generates right now, with 12 Euler steps.</p>
+</section>
+
+<section>
+  <h2>Inference: number of steps changes the result</h2>
+  <div data-widget="flow2d" data-config='{"mode":"euler","source":"gauss","target":"moons","width":520,"height":520,"steps":1,"click":true,"story":true}'></div>
+  <!-- arrow keys step through the stages of the animation: learned flow, 1, 2, 4, 8, 64 Euler steps -->
+  <span class="fragment" data-stage="1"></span><span class="fragment" data-stage="2"></span><span class="fragment" data-stage="3"></span><span class="fragment" data-stage="4"></span><span class="fragment" data-stage="5"></span>
+</section>
+
+<section class="optional">
+  <h2>For the proofs: conditional expectation <span class="optional-badge">optional</span></h2>
+  <div class="cols" style="align-items:center">
+    <div style="font-size:0.78em">
+      <p>$\mathbb E[X \mid \mathcal B]$ is a <b>random variable</b>: the average of $X$ over each cell you can resolve with the information $\mathcal B$. A camera metaphor: finer information, sharper picture.</p>
+      <p>$$\mathbb E\big[\,\mathbb E[X \mid \mathcal B]\;\big|\;\mathcal A\big] = \mathbb E[X \mid \mathcal A] \quad\text{whenever } \mathcal A \subseteq \mathcal B$$</p>
+      <p class="small">A low-resolution picture of a high-resolution picture is just the low-resolution picture; with no information at all, $\mathbb E\big[\mathbb E[X \mid \mathcal B]\big] = \mathbb E[X]$. The theorem on the previous slides is this identity applied to $\mathbb E[x_1 - x_0 \mid x_t]$.</p>
+    </div>
+    <div><svg viewBox="0 0 520 300" style="width:100%; max-width:520px; display:block; font-family:Inter, Arial"><line x1="36" x2="504" y1="216" y2="216" stroke="#9aa1ae"/><line x1="36" x2="36" y1="18" y2="216" stroke="#9aa1ae"/><line x1="36" x2="36" y1="216" y2="221" stroke="#9aa1ae"/><text x="36" y="236" fill="#9aa1ae" font-size="13" text-anchor="middle">0</text><line x1="153.0" x2="153.0" y1="216" y2="221" stroke="#9aa1ae"/><text x="153.0" y="236" fill="#9aa1ae" font-size="13" text-anchor="middle">¼</text><line x1="270.0" x2="270.0" y1="216" y2="221" stroke="#9aa1ae"/><text x="270.0" y="236" fill="#9aa1ae" font-size="13" text-anchor="middle">½</text><line x1="387.0" x2="387.0" y1="216" y2="221" stroke="#9aa1ae"/><text x="387.0" y="236" fill="#9aa1ae" font-size="13" text-anchor="middle">¾</text><line x1="504" x2="504" y1="216" y2="221" stroke="#9aa1ae"/><text x="504" y="236" fill="#9aa1ae" font-size="13" text-anchor="middle">1</text><line x1="38.0" x2="268.0" y1="96.4" y2="96.4" stroke="#5ab0ff" stroke-width="4" stroke-linecap="round"/><line x1="272.0" x2="502.0" y1="113.8" y2="113.8" stroke="#5ab0ff" stroke-width="4" stroke-linecap="round"/><line x1="38.0" x2="151.0" y1="137.0" y2="137.0" stroke="#5fd38d" stroke-width="4" stroke-linecap="round"/><line x1="155.0" x2="268.0" y1="55.9" y2="55.9" stroke="#5fd38d" stroke-width="4" stroke-linecap="round"/><line x1="272.0" x2="385.0" y1="79.2" y2="79.2" stroke="#5fd38d" stroke-width="4" stroke-linecap="round"/><line x1="389.0" x2="502.0" y1="148.4" y2="148.4" stroke="#5fd38d" stroke-width="4" stroke-linecap="round"/><polyline points="36.0,176.1 39.9,174.6 43.8,172.9 47.7,171.1 51.6,169.2 55.5,167.1 59.4,164.9 63.3,162.5 67.2,160.0 71.1,157.4 75.0,154.7 78.9,151.8 82.8,148.9 86.7,145.9 90.6,142.8 94.5,139.6 98.4,136.3 102.3,133.0 106.2,129.6 110.1,126.1 114.0,122.7 117.9,119.2 121.8,115.7 125.7,112.2 129.6,108.7 133.5,105.2 137.4,101.7 141.3,98.2 145.2,94.8 149.1,91.4 153.0,88.1 156.9,84.8 160.8,81.7 164.7,78.6 168.6,75.5 172.5,72.6 176.4,69.8 180.3,67.1 184.2,64.5 188.1,62.0 192.0,59.7 195.9,57.5 199.8,55.4 203.7,53.5 207.6,51.7 211.5,50.1 215.4,48.6 219.3,47.4 223.2,46.2 227.1,45.3 231.0,44.5 234.9,43.9 238.8,43.4 242.7,43.1 246.6,43.0 250.5,43.1 254.4,43.4 258.3,43.8 262.2,44.4 266.1,45.1 270.0,46.1 273.9,47.2 277.8,48.4 281.7,49.8 285.6,51.3 289.5,53.0 293.4,54.9 297.3,56.8 301.2,58.9 305.1,61.1 309.0,63.5 312.9,65.9 316.8,68.5 320.7,71.1 324.6,73.8 328.5,76.6 332.4,79.5 336.3,82.4 340.2,85.4 344.1,88.4 348.0,91.5 351.9,94.6 355.8,97.7 359.7,100.8 363.6,104.0 367.5,107.1 371.4,110.2 375.3,113.2 379.2,116.2 383.1,119.2 387.0,122.1 390.9,125.0 394.8,127.8 398.7,130.5 402.6,133.1 406.5,135.7 410.4,138.1 414.3,140.4 418.2,142.6 422.1,144.7 426.0,146.6 429.9,148.4 433.8,150.1 437.7,151.6 441.6,153.0 445.5,154.2 449.4,155.3 453.3,156.2 457.2,156.9 461.1,157.4 465.0,157.8 468.9,158.1 472.8,158.1 476.7,158.0 480.6,157.7 484.5,157.2 488.4,156.6 492.3,155.8 496.2,154.8 500.1,153.6 504.0,152.3" fill="none" stroke="#ff6b6b" stroke-width="2.5"/><g font-size="14"><rect x="36" y="256" width="468" height="36" rx="6" fill="#1e2128" stroke="#3a3f4b"/><line x1="46" x2="70" y1="274" y2="274" stroke="#ff6b6b" stroke-width="3"/><text x="78" y="279" fill="#e7e9ee" font-size="14">X: full resolution</text><line x1="196" x2="220" y1="274" y2="274" stroke="#5fd38d" stroke-width="3"/><text x="228" y="279" fill="#e7e9ee" font-size="14">E[X | B]: 4 cells</text><line x1="346" x2="370" y1="274" y2="274" stroke="#5ab0ff" stroke-width="3"/><text x="378" y="279" fill="#e7e9ee" font-size="14">E[X | A]: 2 cells</text></g></svg></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 3</div>
+  <h1>Extensions, Applications & Discussion</h1>
+</section>
+
+<section>
+  <h2>Diffusion models</h2>
+  <div class="cols" style="align-items:center; grid-template-columns:1fr 1.2fr">
+    <div><svg viewBox="0 0 470 180" style="width:100%; max-width:470px; display:block; font-family:Inter, Arial"><circle cx="40" cy="125" r="7" fill="#9aa1ae"/><circle cx="430" cy="55" r="7" fill="#f2b134"/><polyline points="40.0,125.0 44.3,126.0 48.7,129.8 53.0,127.2 57.3,130.2 61.7,137.1 66.0,140.4 70.3,151.7 74.7,145.8 79.0,146.6 83.3,141.9 87.7,136.5 92.0,135.4 96.3,137.0 100.7,140.0 105.0,143.5 109.3,159.0 113.7,165.0 118.0,153.6 122.3,154.8 126.7,150.2 131.0,146.3 135.3,155.1 139.7,153.1 144.0,139.0 148.3,140.7 152.7,138.1 157.0,129.3 161.3,122.3 165.7,117.2 170.0,116.4 174.3,112.6 178.7,112.4 183.0,124.4 187.3,117.9 191.7,111.4 196.0,108.7 200.3,115.4 204.7,109.5 209.0,118.5 213.3,108.2 217.7,99.9 222.0,98.4 226.3,91.2 230.7,85.7 235.0,87.6 239.3,91.4 243.7,91.0 248.0,87.7 252.3,95.8 256.7,97.3 261.0,94.3 265.3,101.4 269.7,93.7 274.0,93.4 278.3,96.6 282.7,95.1 287.0,89.6 291.3,90.6 295.7,85.3 300.0,79.7 304.3,71.0 308.7,78.7 313.0,73.3 317.3,79.9 321.7,81.1 326.0,77.7 330.3,80.9 334.7,81.4 339.0,80.8 343.3,69.7 347.7,68.7 352.0,73.5 356.3,75.5 360.7,81.1 365.0,90.1 369.3,91.6 373.7,104.1 378.0,92.2 382.3,89.2 386.7,70.3 391.0,74.8 395.3,74.2 399.7,84.9 404.0,81.2 408.3,65.9 412.7,73.8 417.0,63.4 421.3,53.6 425.7,51.5 430.0,55.0" fill="none" stroke="#b28dff" stroke-width="1.6"/><polyline points="40.0,125.0 44.9,125.8 49.8,126.6 54.6,127.3 59.5,127.9 64.4,128.5 69.2,129.0 74.1,129.5 79.0,129.8 83.9,130.2 88.8,130.4 93.6,130.6 98.5,130.7 103.4,130.8 108.2,130.8 113.1,130.8 118.0,130.7 122.9,130.5 127.8,130.3 132.6,130.0 137.5,129.6 142.4,129.2 147.2,128.8 152.1,128.2 157.0,127.7 161.9,127.1 166.8,126.4 171.6,125.7 176.5,124.9 181.4,124.1 186.2,123.2 191.1,122.3 196.0,121.3 200.9,120.3 205.8,119.2 210.6,118.1 215.5,117.0 220.4,115.8 225.2,114.6 230.1,113.3 235.0,112.0 239.9,110.7 244.8,109.3 249.6,107.9 254.5,106.5 259.4,105.0 264.2,103.6 269.1,102.1 274.0,100.6 278.9,99.0 283.8,97.5 288.6,95.9 293.5,94.3 298.4,92.7 303.2,91.1 308.1,89.5 313.0,87.9 317.9,86.3 322.8,84.7 327.6,83.1 332.5,81.5 337.4,79.9 342.2,78.3 347.1,76.8 352.0,75.2 356.9,73.7 361.8,72.2 366.6,70.7 371.5,69.2 376.4,67.8 381.2,66.4 386.1,65.1 391.0,63.8 395.9,62.5 400.8,61.3 405.6,60.1 410.5,58.9 415.4,57.9 420.2,56.9 425.1,55.9 430.0,55.0" fill="none" stroke="#5ab0ff" stroke-width="3"/><text x="40" y="151" fill="#9aa1ae" font-size="14" text-anchor="middle">noise</text><text x="430" y="41" fill="#f2b134" font-size="14" text-anchor="middle">data</text><text x="150" y="30" fill="#5ab0ff" font-size="14">ODE: flow matching</text><text x="150" y="165" fill="#b28dff" font-size="14">SDE: diffusion (noise added at every step)</text></svg></div>
+    <div>
+      <table style="font-size:0.78em">
+        <tr><th></th><th>flow matching</th><th>diffusion</th></tr>
+        <tr><td>sampling</td><td>ODE: deterministic steps</td><td>SDE: every step adds noise</td></tr>
+        <tr><td>what is learned</td><td>the velocity $u_t$</td><td>the score $\nabla_x \log p_t$ (or the noise)</td></tr>
+        <tr><td>training</td><td colspan="2">the same trick: regress on a per-data-point target</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Conditional generation</h2>
+  <div style="display:grid; grid-template-columns:repeat(4, 240px); gap:0 24px; justify-content:center; font-size:0.62em; text-align:center; margin-bottom:0.3em">
+    <div>$p_{\text{data}}$: all images</div>
+    <div>$p_{\text{data}}(\,\cdot \mid y = \text{“dog”})$</div>
+    <div>$p_{\text{data}}(\,\cdot \mid y = \text{“cat”})$</div>
+    <div>$p_{\text{data}}(\,\cdot \mid y = \text{“landscape”})$</div>
+  </div>
+  <div data-widget="condfam" data-config='{"size":240,"gap":24}'></div>
+  <div class="cols" style="font-size:0.8em; margin-top:0.5em; align-items:start">
+    <div class="box">A prompt $y$ picks one member of a <b>family of distributions</b> $\{\, p_{\text{data}}(\,\cdot \mid y) \,\}_{y}$ indexed by $y$. We learn the whole family at once.</div>
+    <div class="box">In general $y$ = <b>conditioning tokens</b>: a text prompt, a class label, an image, a robot's observation.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Conditioning on a prompt</h2>
+  <div class="cols" style="align-items:center">
+    <div>
+      <ul style="font-size:0.9em">
+        <li>$v_\theta(t, x, y)$: the condition $y$ is <b>one more input</b> — a class label, a text embedding, an image, a robot observation</li>
+        <li>training pairs $(x_1, y)$ come from the data set</li>
+        <li>the loss is unchanged</li>
+        <li>inference: fix $y$ and run the same numerical integration loop</li>
+      </ul>
+    </div>
+    <div><svg viewBox="0 0 440 190" style="width:100%; max-width:440px; display:block; font-family:Inter, Arial"><defs><marker id="cda" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+  <g font-size="17" fill="#e7e9ee">
+  <rect x="10" y="18" width="130" height="38" rx="8" fill="#1e2128" stroke="#3a3f4b"/><text x="75" y="43" text-anchor="middle">time t</text>
+  <rect x="10" y="76" width="130" height="38" rx="8" fill="#1e2128" stroke="#3a3f4b"/><text x="75" y="101" text-anchor="middle">point x_t</text>
+  <rect x="10" y="134" width="130" height="38" rx="8" fill="#1e2128" stroke="#f2b134"/><text x="75" y="159" text-anchor="middle" fill="#f2b134">prompt y</text>
+  <line x1="140" y1="37" x2="196" y2="80" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cda)"/><line x1="140" y1="95" x2="196" y2="95" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cda)"/><line x1="140" y1="153" x2="196" y2="110" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cda)"/>
+  <rect x="200" y="55" width="110" height="80" rx="10" fill="#272b34" stroke="#b28dff" stroke-width="2"/><text x="255" y="90" text-anchor="middle" font-size="22" font-style="italic">v_θ</text><text x="255" y="118" text-anchor="middle" font-size="13" fill="#9aa1ae">any network</text>
+  <line x1="310" y1="95" x2="356" y2="95" stroke="#9aa1ae" stroke-width="2" marker-end="url(#cda)"/>
+  <rect x="360" y="76" width="74" height="38" rx="8" fill="#1e2128" stroke="#5ab0ff"/><text x="397" y="101" text-anchor="middle" fill="#5ab0ff">velocity</text>
+  </g></svg></div>
+  </div>
+</section>
+
+<section>
+  <h2>Video: how do AI images and videos work?</h2>
+  <p style="font-size:0.7em; margin:0 0 0.4em">Welch Labs, guest video on 3Blue1Brown, from 28:16 · <a href="https://www.youtube.com/watch?v=iv-5mZ_9CPY&t=1696s" target="_blank" rel="noopener">youtube.com/watch?v=iv-5mZ_9CPY</a></p>
+  <div class="fragment"><div data-widget="ytvideo" data-config='{"id":"iv-5mZ_9CPY","start":1696,"width":900,"height":506,"label":"from 28:16"}' style="margin:0 auto; width:900px"></div></div>
+</section>
+
+<section>
+  <h2>Example application: π0</h2>
+  <!-- Figure 3 of Black et al., π0 (2024), with the flow matching expert (orange) and the conditioning inputs (blue) marked -->
+  <div style="position:relative; width:1120px; margin:0.1em auto 0">
+    <img src="../../assets/lecture05/pi0-fig3.png" alt="Overview of the pi-zero model: pre-trained VLM with three camera images and a language command, and the action expert with noise and the robot state, producing an action chunk" style="display:block; width:100%; border-radius:8px; background:#fff">
+    <div style="position:absolute; left:61.4%; top:14.6%; width:19.6%; height:55.2%; border:3px solid var(--accent); border-radius:8px; background:rgba(242,177,52,0.14); pointer-events:none"></div>
+    <div style="position:absolute; left:69.4%; top:69.5%; width:7.4%; height:12.8%; border:3px solid var(--accent); border-radius:8px; background:transparent; pointer-events:none"></div>
+    <div style="position:absolute; left:19.9%; top:59.4%; width:28.6%; height:40.2%; border:3px solid var(--blue); border-radius:8px; background:transparent; pointer-events:none"></div>
+    <div style="position:absolute; left:49.0%; top:58.5%; width:10.2%; height:15.5%; border:3px solid var(--blue); border-radius:8px; background:transparent; pointer-events:none"></div>
+    <div style="position:absolute; left:62.0%; top:59.2%; width:4.2%; height:22.8%; border:3px solid var(--blue); border-radius:8px; background:transparent; pointer-events:none"></div>
+    <div style="position:absolute; left:13%; width:47%; top:calc(100% + 0.65em); font-size:0.78em; line-height:1.25; color:var(--blue); font-weight:600">conditioning $o_t$: camera images (through ViT), language command, robot state $q_t$</div>
+    <div style="position:absolute; left:63%; width:37%; top:calc(100% + 0.65em); font-size:0.78em; line-height:1.25; color:var(--accent); font-weight:600">flow matching expert: denoises the action chunk, starting from noise</div>
+  </div>
+  <p class="credit">Black et al., π0: A Vision-Language-Action Flow Model for General Robot Control, 2024 · figure: Fig. 3 of the paper, annotated</p>
+</section>
+
+<section>
+  <h2>Example application: π0 - idea</h2>
+  <div class="cols" style="grid-template-columns:1fr auto; gap:1.4em; align-items:center">
+    <div style="display:flex; align-items:stretch; justify-content:center; gap:0.4em; min-height:420px">
+      <div style="align-self:center" class="box"><span style="font-family:var(--mono); font-size:0.85em; white-space:nowrap">Flow Matching</span></div>
+      <svg viewBox="0 0 24 340" preserveAspectRatio="none" style="width:24px; flex:none"><path d="M 20 4 Q 10 4 10 24 L 10 150 Q 10 170 2 170 Q 10 170 10 190 L 10 316 Q 10 336 20 336" fill="none" stroke="#9aa1ae" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div class="pichain" style="display:flex; flex-direction:column; justify-content:space-between; align-items:center; font-size:0.9em; padding:0.2em 0.4em">
+        <div data-pi="0">$\textcolor{#5ab0ff}{\mathbf A_t^0} \sim \mathcal N(\mathbf 0, \mathbf I)$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div data-pi="tau">$\textcolor{#5fd38d}{\mathbf A_t^\tau}$ <span class="dim" data-tau style="display:inline-block; min-width:5.2em; font-size:0.8em; text-align:left"></span></div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div data-pi="1">$\textcolor{#ff6b6b}{\mathbf A_t^1} \sim p_1$</div>
+      </div>
+    </div>
+    <div data-widget="chunkflow" data-config='{"n":10,"episodes":[[-1,1],[1,1]],"width":540,"height":500}'></div>
+  </div>
+  <aside class="notes">Proposal 2: an exact illustration computed in the browser instead of the recording. The gripper has to get from the start to the box past two obstacles; the demonstrations go around each on the left or on the right. The task takes four chunks of 50 positions. The policy infers a chunk from the current observation (here the gripper position and the stage of the task), the robot executes it open loop, and only then the next inference starts, from where the gripper is now. Each inference is the lecture's flow: A^0 ~ N(0, I), 10 Euler steps of the marginal flow of the conditional OT paths (computed from the demonstrations that fit the observation, not a trained network), ending in A^1 ~ p_1. The chain on the left lights up during an inference and goes dark while the robot executes. The first inference is slow, the others fast. Two episodes with different choices: left then right (an S-curve), then right and right. The choice at the first obstacle is made in the first chunk, the choice at the second obstacle in the third; once the gripper is on one side, the observation rules out the other, so the chunks stay consistent. No chunk ever goes through an obstacle, which an average of the two ways would.</aside>
+</section>
+
+<section>
+  <h2>Example application: π0 - how it looks in real life</h2>
+  <div class="cols" style="grid-template-columns:1fr auto; gap:1.4em; align-items:center">
+    <div style="display:flex; align-items:stretch; justify-content:center; gap:0.4em; min-height:420px">
+      <div style="align-self:center" class="box"><span style="font-family:var(--mono); font-size:0.85em; white-space:nowrap">Flow Matching</span></div>
+      <svg viewBox="0 0 24 340" preserveAspectRatio="none" style="width:24px; flex:none"><path d="M 20 4 Q 10 4 10 24 L 10 150 Q 10 170 2 170 Q 10 170 10 190 L 10 316 Q 10 336 20 336" fill="none" stroke="#9aa1ae" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div style="display:flex; flex-direction:column; justify-content:space-between; align-items:center; font-size:0.9em; padding:0.2em 0.4em">
+        <div>$\textcolor{#5ab0ff}{\mathbf A_t^0} \sim \mathcal N(\mathbf 0, \mathbf I)$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div>$\textcolor{#5fd38d}{\mathbf A_t^\tau}$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div>$\textcolor{#ff6b6b}{\mathbf A_t^1} \sim p_1$</div>
+      </div>
+    </div>
+    <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/lecture05/pi0-robot-poster.jpg" style="width:560px; display:block; border-radius:10px"><source src="../../assets/lecture05/pi0-robot.mp4" type="video/mp4"></video>
+  </div>
+</section>
+
+<section>
+  <h2>We are doing research in these areas at MIMUW</h2>
+  <div class="photos">
+    <figure><img src="../../assets/lecture05/lab-75.jpg" alt="Two Trossen robot arms above a table with a cardboard box, seen from a top camera"><figcaption>bimanual box folding</figcaption></figure>
+    <figure><img src="../../assets/lecture05/lab-83.jpg" alt="Two Trossen robot arms sorting blue 3D-printed blocks into a bin"><figcaption>sorting blocks</figcaption></figure>
+    <figure><img src="../../assets/lecture05/lab-84.jpg" alt="Robot arms and a UR arm over a grey bin on a bench"><figcaption>bin picking</figcaption></figure>
+  </div>
+  <p style="font-size:0.85em; margin-top:0.6em">Flow-matching and diffusion policies for bimanual manipulation, trained from demonstrations. If you want to work on this, talk to us.</p>
+</section>
+
+<section>
+  <h2>Summary</h2>
+  <ul>
+    <li>Flow matching <b>deforms</b> a known distribution onto the target distribution</li>
+    <li>At inference, we draw a sample from the known distribution and numerically integrate the deformation.</li>
+    <li>A deformation in time is a <b>flow</b></li>
+    <li>Learning the velocity avoids introducing explicit constraints for the network</li>
+    <li>Through conditioning we try to learn families of probability distributions at once.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Further reading</h2>
+  <ul style="font-size:0.76em">
+    <li>Lipman, Chen, Ben-Hamu, Nickel, Le — <a href="https://arxiv.org/abs/2210.02747">Flow Matching for Generative Modeling</a> (ICLR 2023): the paper, with the theorems for Gaussian paths</li>
+    <li>Liu, Gong, Liu — <a href="https://arxiv.org/abs/2209.03003">Flow Straight and Fast (rectified flow)</a> and Albergo, Vanden-Eijnden — <a href="https://arxiv.org/abs/2209.15571">stochastic interpolants</a> (both 2022): closely related formulations</li>
+    <li>Holderrieth, Erives — <a href="https://diffusion.csail.mit.edu/">MIT 6.S184: Flow Matching and Diffusion Models</a>: lecture notes and labs</li>
+    <li>Fjelde, Mathieu, Dutordoir — <a href="https://mlg.eng.cam.ac.uk/blog/2024/01/20/flow-matching.html">An introduction to Flow Matching</a> (Cambridge MLG blog): interactive figures</li>
+    <li>Lipman et al. — <a href="https://arxiv.org/abs/2412.06264">Flow Matching Guide and Code</a> (2024) and <a href="https://github.com/atong01/conditional-flow-matching">TorchCFM</a>: reference implementations</li>
+    <li>Black et al. — <a href="https://arxiv.org/abs/2410.24164">π0: A Vision-Language-Action Flow Model for General Robot Control</a> (2024)</li>
+  </ul>
+</section>
+
+<section id="feedback" class="title-slide">
+  <h1>Feedback</h1>
+  <div style="display:flex; align-items:center; gap:1.5em; margin-top:0.5em">
+    <img src="../../assets/feedback-qr.svg" alt="QR code linking to tinyurl.com/mimuw-dnn-feedback" style="width:340px; height:340px; box-sizing:content-box; padding:18px; background:#fff; border-radius:8px; margin:0">
+    <div>
+      <p>Please spend a minute: your feedback helps me improve the next lecture.</p>
+      <p style="font-family:var(--mono); font-size:1.1em"><a href="https://tinyurl.com/mimuw-dnn-feedback">tinyurl.com/mimuw-dnn-feedback</a></p>
+      <p class="small">Anonymous, no login, three questions.</p>
+    </div>
+  </div>
+</section>
+
+</div></div>
+<script type="module" src="../../shared/deck.js"></script>
+</body>
+</html>

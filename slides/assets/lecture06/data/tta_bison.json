@@ -1,0 +1,154 @@
+{
+ "size": [
+  392,
+  256
+ ],
+ "true": "bison",
+ "crops": [
+  {
+   "name": "top-left",
+   "flip": false,
+   "box": [
+    0,
+    0,
+    224,
+    224
+   ],
+   "p_true": 0.189,
+   "top1": "water buffalo",
+   "p_top1": 0.351
+  },
+  {
+   "name": "top-left",
+   "flip": true,
+   "box": [
+    0,
+    0,
+    224,
+    224
+   ],
+   "p_true": 0.135,
+   "top1": "water buffalo",
+   "p_top1": 0.323
+  },
+  {
+   "name": "top-right",
+   "flip": false,
+   "box": [
+    168,
+    0,
+    224,
+    224
+   ],
+   "p_true": 0.986,
+   "top1": "bison",
+   "p_top1": 0.986
+  },
+  {
+   "name": "top-right",
+   "flip": true,
+   "box": [
+    168,
+    0,
+    224,
+    224
+   ],
+   "p_true": 0.998,
+   "top1": "bison",
+   "p_top1": 0.998
+  },
+  {
+   "name": "bottom-left",
+   "flip": false,
+   "box": [
+    0,
+    32,
+    224,
+    224
+   ],
+   "p_true": 0.206,
+   "top1": "water buffalo",
+   "p_top1": 0.318
+  },
+  {
+   "name": "bottom-left",
+   "flip": true,
+   "box": [
+    0,
+    32,
+    224,
+    224
+   ],
+   "p_true": 0.149,
+   "top1": "water buffalo",
+   "p_top1": 0.299
+  },
+  {
+   "name": "bottom-right",
+   "flip": false,
+   "box": [
+    168,
+    32,
+    224,
+    224
+   ],
+   "p_true": 0.915,
+   "top1": "bison",
+   "p_top1": 0.915
+  },
+  {
+   "name": "bottom-right",
+   "flip": true,
+   "box": [
+    168,
+    32,
+    224,
+    224
+   ],
+   "p_true": 0.991,
+   "top1": "bison",
+   "p_top1": 0.991
+  },
+  {
+   "name": "centre",
+   "flip": false,
+   "box": [
+    84,
+    16,
+    224,
+    224
+   ],
+   "p_true": 0.916,
+   "top1": "bison",
+   "p_top1": 0.916
+  },
+  {
+   "name": "centre",
+   "flip": true,
+   "box": [
+    84,
+    16,
+    224,
+    224
+   ],
+   "p_true": 0.788,
+   "top1": "bison",
+   "p_top1": 0.788
+  }
+ ],
+ "avg_true": 0.6273885369300842,
+ "avg_top": [
+  [
+   "bison",
+   0.627
+  ],
+  [
+   "water buffalo",
+   0.13
+  ],
+  [
+   "hartebeest",
+   0.048
+  ]
+ ]
+}
